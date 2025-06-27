@@ -10,7 +10,8 @@ import {
   getTemplateApiUrl,
   commonRequirements,
   checkLicenseFile,
-  analyzeDependencies
+  analyzeDependencies,
+  analyzePackageJson
 } from "./lib/utils";
 import { FileTemplate, getTemplatesByType } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -30,7 +31,8 @@ import {
   Warning, 
   FilePlus,
   FileText,
-  File
+  File,
+  Package
 } from "@phosphor-icons/react";
 
 function App() {
@@ -102,10 +104,17 @@ function App() {
       
       // Check each requirement
       for (const req of requirements) {
-        // Check if file exists in repo
-        const fileInRepo = files.find(file => 
-          file.path.toLowerCase() === req.path.toLowerCase()
-        );
+        // Check if file exists in repo - handle LICENSE.txt as alternative to LICENSE
+        const isLicenseReq = req.path === 'LICENSE' || req.path === 'LICENSE.txt';
+        
+        const fileInRepo = files.find(file => {
+          // For license files, match either LICENSE or LICENSE.txt
+          if (isLicenseReq) {
+            return file.path === 'LICENSE' || file.path === 'LICENSE.txt';
+          }
+          // For other files, exact match
+          return file.path.toLowerCase() === req.path.toLowerCase();
+        });
         
         const fileExists = !!fileInRepo;
         
@@ -118,7 +127,7 @@ function App() {
           };
           
           // Special checks for specific files
-          if (req.path === 'LICENSE') {
+          if (fileInRepo.path === 'LICENSE' || fileInRepo.path === 'LICENSE.txt') {
             // Check license content
             try {
               const licenseCheck = await checkLicenseFile(fileInRepo.download_url);
@@ -131,7 +140,7 @@ function App() {
             } catch (error) {
               console.error("Error checking license:", error);
             }
-          } else if (req.path === 'package-lock.json') {
+          } else if (fileInRepo.path === 'package-lock.json') {
             // Analyze dependencies for GPL/AGPL licenses
             try {
               const dependencyAnalysis = await analyzeDependencies(fileInRepo.download_url);
@@ -143,6 +152,29 @@ function App() {
               }
             } catch (error) {
               console.error("Error analyzing dependencies:", error);
+            }
+          } else if (fileInRepo.path === 'package.json') {
+            // Analyze package.json for dependency counts
+            try {
+              const packageJsonAnalysis = await analyzePackageJson(fileInRepo.download_url);
+              
+              // Store the dependency counts in the dependencyAnalysis field
+              if (!result.dependencyAnalysis) {
+                result.dependencyAnalysis = {
+                  total: 0,
+                  gplCount: 0,
+                  agplCount: 0,
+                  gplDependencies: [],
+                  agplDependencies: [],
+                  dependenciesCount: packageJsonAnalysis.dependenciesCount,
+                  devDependenciesCount: packageJsonAnalysis.devDependenciesCount
+                };
+              } else {
+                result.dependencyAnalysis.dependenciesCount = packageJsonAnalysis.dependenciesCount;
+                result.dependencyAnalysis.devDependenciesCount = packageJsonAnalysis.devDependenciesCount;
+              }
+            } catch (error) {
+              console.error("Error analyzing package.json:", error);
             }
           }
           
@@ -419,9 +451,35 @@ function App() {
                         )}
                         
                         {/* License check result */}
-                        {result.licenseCheck && !result.licenseCheck.isValid && (
-                          <div className="mt-2 text-xs bg-amber-100 text-amber-800 rounded p-1">
+                        {result.licenseCheck && (
+                          <div className={`mt-2 text-xs ${result.licenseCheck.isValid ? 'bg-green-50 text-green-800' : 'bg-amber-100 text-amber-800'} rounded p-1`}>
                             {result.licenseCheck.message}
+                          </div>
+                        )}
+                        
+                        {/* Package.json dependency count */}
+                        {result.dependencyAnalysis?.dependenciesCount !== undefined && (
+                          <div className="mt-2">
+                            <div className="text-xs font-medium mb-1 flex items-center">
+                              <Package className="h-3 w-3 mr-1" />
+                              Dependency Analysis:
+                            </div>
+                            <div className="bg-secondary/20 p-2 rounded text-xs">
+                              <div className="grid grid-cols-2 gap-1">
+                                <div className="flex justify-between">
+                                  <span>Production dependencies:</span>
+                                  <span className="font-medium">{result.dependencyAnalysis.dependenciesCount}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Dev dependencies:</span>
+                                  <span className="font-medium">{result.dependencyAnalysis.devDependenciesCount}</span>
+                                </div>
+                                <div className="flex justify-between col-span-2">
+                                  <span>Total package dependencies:</span>
+                                  <span className="font-medium">{result.dependencyAnalysis.dependenciesCount + result.dependencyAnalysis.devDependenciesCount}</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         )}
                         

@@ -28,6 +28,8 @@ export type DependencyAnalysis = {
   agplCount: number;
   gplDependencies: string[];
   agplDependencies: string[];
+  dependenciesCount?: number; // Count of all dependencies from package.json
+  devDependenciesCount?: number; // Count of all dev dependencies from package.json
 }
 
 export type ValidationResult = {
@@ -106,28 +108,55 @@ export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
       };
     }
     
-    const fileData = await response.json();
-    const content = atob(fileData.content); // Decode base64 content
+    const fileData = await response.text();
     
-    // Check for variations of GitHub copyright
-    const githubPatterns = [
-      /GitHub, Inc/i,
-      /GitHub Inc/i,
-      /GitHub/i
-    ];
-    
-    const containsGitHub = githubPatterns.some(pattern => pattern.test(content));
-    
-    if (containsGitHub) {
-      return {
-        isValid: true,
-        message: "License contains GitHub copyright notice"
-      };
-    } else {
-      return {
-        isValid: false,
-        message: "License does not contain GitHub copyright notice"
-      };
+    try {
+      // If it's a JSON response with base64 content
+      const jsonData = JSON.parse(fileData);
+      const content = atob(jsonData.content); // Decode base64 content
+      
+      // Check for variations of GitHub copyright
+      const githubPatterns = [
+        /GitHub, Inc/i,
+        /GitHub Inc/i,
+        /GitHub/i
+      ];
+      
+      const containsGitHub = githubPatterns.some(pattern => pattern.test(content));
+      
+      if (containsGitHub) {
+        return {
+          isValid: true,
+          message: "License contains GitHub copyright notice"
+        };
+      } else {
+        return {
+          isValid: false,
+          message: "License does not contain GitHub copyright notice"
+        };
+      }
+    } catch (error) {
+      // If it's not a JSON response or can't be parsed as JSON
+      // Check for GitHub directly in the response text
+      const githubPatterns = [
+        /GitHub, Inc/i,
+        /GitHub Inc/i,
+        /GitHub/i
+      ];
+      
+      const containsGitHub = githubPatterns.some(pattern => pattern.test(fileData));
+      
+      if (containsGitHub) {
+        return {
+          isValid: true,
+          message: "License contains GitHub copyright notice"
+        };
+      } else {
+        return {
+          isValid: false,
+          message: "License does not contain GitHub copyright notice"
+        };
+      }
     }
   } catch (error) {
     console.error("Error checking license file:", error);
@@ -190,11 +219,42 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
   }
 }
 
+// Analyze package.json for total dependencies
+export async function analyzePackageJson(fileUrl: string): Promise<{
+  dependenciesCount: number;
+  devDependenciesCount: number;
+}> {
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw new Error("Could not retrieve package.json");
+    }
+    
+    const fileData = await response.json();
+    const content = JSON.parse(atob(fileData.content)); // Decode base64 content and parse JSON
+    
+    const dependencies = content.dependencies || {};
+    const devDependencies = content.devDependencies || {};
+    
+    return {
+      dependenciesCount: Object.keys(dependencies).length,
+      devDependenciesCount: Object.keys(devDependencies).length
+    };
+  } catch (error) {
+    console.error("Error analyzing package.json:", error);
+    return {
+      dependenciesCount: 0,
+      devDependenciesCount: 0
+    };
+  }
+}
+
 // Common file requirements presets
 export const commonRequirements: Record<string, FileRequirement[]> = {
   basic: [
     { path: 'README.md', required: true, description: 'Project documentation' },
     { path: 'LICENSE', required: true, description: 'License information' },
+    { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
     { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
     { path: 'SUPPORT.md', required: true, description: 'Support information' },
     { path: 'SECURITY.md', required: true, description: 'Security policy' },
@@ -205,6 +265,7 @@ export const commonRequirements: Record<string, FileRequirement[]> = {
     { path: 'package-lock.json', required: false, description: 'NPM dependency lock file' },
     { path: 'README.md', required: true, description: 'Project documentation' },
     { path: 'LICENSE', required: true, description: 'License information' },
+    { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
     { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
     { path: 'SUPPORT.md', required: true, description: 'Support information' },
     { path: 'SECURITY.md', required: true, description: 'Security policy' },
@@ -215,6 +276,7 @@ export const commonRequirements: Record<string, FileRequirement[]> = {
   python: [
     { path: 'README.md', required: true, description: 'Project documentation' },
     { path: 'LICENSE', required: true, description: 'License information' },
+    { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
     { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
     { path: 'SUPPORT.md', required: true, description: 'Support information' },
     { path: 'SECURITY.md', required: true, description: 'Security policy' },
