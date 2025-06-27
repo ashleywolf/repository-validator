@@ -5,13 +5,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileTemplate } from "@/lib/templates";
-import { Check, Copy, Download, FileText } from "@phosphor-icons/react";
+import { Check, Copy, Download, FileText, GitPullRequest } from "@phosphor-icons/react";
 
 type TemplateViewerProps = {
   template: FileTemplate;
+  repoOwner?: string;
+  repoName?: string;
 }
 
-export function TemplateViewer({ template }: TemplateViewerProps) {
+export function TemplateViewer({ template, repoOwner, repoName }: TemplateViewerProps) {
   const [content, setContent] = useState<string>(template.content);
   const [copied, setCopied] = useState<boolean>(false);
   
@@ -37,6 +39,16 @@ export function TemplateViewer({ template }: TemplateViewerProps) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+  
+  // Handle creating a PR with this content
+  const handleCreatePR = () => {
+    if (!repoOwner || !repoName) return;
+    
+    // Encode content for URL
+    const encodedContent = encodeURIComponent(content);
+    const prUrl = `https://github.com/${repoOwner}/${repoName}/new/main?filename=${template.filename}&value=${encodedContent}`;
+    window.open(prUrl, '_blank');
   };
   
   return (
@@ -72,24 +84,34 @@ export function TemplateViewer({ template }: TemplateViewerProps) {
           </TabsContent>
         </Tabs>
       </CardContent>
-      <CardFooter className="flex justify-end gap-2">
-        <Button variant="outline" onClick={handleCopy}>
-          {copied ? (
-            <>
-              <Check className="mr-2 h-4 w-4" />
-              Copied
-            </>
-          ) : (
-            <>
-              <Copy className="mr-2 h-4 w-4" />
-              Copy
-            </>
+      <CardFooter className="flex justify-between">
+        <div>
+          {repoOwner && repoName && (
+            <Button variant="default" onClick={handleCreatePR}>
+              <GitPullRequest className="mr-2 h-4 w-4" />
+              Create PR
+            </Button>
           )}
-        </Button>
-        <Button variant="default" onClick={handleDownload}>
-          <Download className="mr-2 h-4 w-4" />
-          Download
-        </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleCopy}>
+            {copied ? (
+              <>
+                <Check className="mr-2 h-4 w-4" />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy
+              </>
+            )}
+          </Button>
+          <Button variant="secondary" onClick={handleDownload}>
+            <Download className="mr-2 h-4 w-4" />
+            Download
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );

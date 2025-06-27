@@ -18,6 +18,8 @@ export type ValidationResult = {
   exists: boolean;
   message: string;
   status: 'success' | 'warning' | 'error';
+  location?: 'repo' | 'org' | 'none';
+  prUrl?: string;
 }
 
 export type FileRequirement = {
@@ -29,10 +31,11 @@ export type FileRequirement = {
 export type ValidationSummary = {
   repoName: string;
   repoUrl: string;
-  files: RepoFile[];
   results: Record<string, ValidationResult>;
   missingRequired: number;
   missingRecommended: number;
+  owner: string;
+  repo: string;
 }
 
 // Extract owner and repo name from GitHub URL
@@ -61,6 +64,16 @@ export function getApiUrl(url: string): string | null {
   if (!parsed) return null;
   
   return `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/contents`;
+}
+
+// Get the URL for GitHub organization .github repo API calls
+export function getOrgDotGithubApiUrl(owner: string): string {
+  return `https://api.github.com/repos/${owner}/.github/contents`;
+}
+
+// Get the URL for GitHub open-source templates
+export function getTemplateApiUrl(filename: string): string {
+  return `https://api.github.com/repos/github/open-source-releases/contents/templates/${filename}`;
 }
 
 // Common file requirements presets

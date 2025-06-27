@@ -6,6 +6,8 @@ import {
   RepoFile,
   isValidGitHubUrl,
   parseGitHubUrl,
+  getOrgDotGithubApiUrl,
+  getTemplateApiUrl,
   commonRequirements
 } from "./lib/utils";
 import { FileTemplate, getTemplatesByType } from "./lib/templates";
@@ -26,7 +28,6 @@ import {
   Warning, 
   FilePlus,
   FileText,
-  FolderOpen,
   File
 } from "@phosphor-icons/react";
 
@@ -63,8 +64,10 @@ function App() {
         throw new Error("Invalid GitHub URL format");
       }
       
+      const { owner, repo } = repoInfo;
+      
       // Create the API URL for fetching contents
-      const apiUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents`;
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
       
       // Fetch repository contents
       const response = await fetch(apiUrl);
@@ -94,7 +97,8 @@ function App() {
       let missingRequired = 0;
       let missingRecommended = 0;
       
-      requirements.forEach(req => {
+      // Check each requirement
+      for (const req of requirements) {
         // Check if file exists in repo
         const fileExists = files.some(file => 
           file.path.toLowerCase() === req.path.toLowerCase()
@@ -103,36 +107,70 @@ function App() {
         if (fileExists) {
           results[req.path] = {
             exists: true,
-            message: `${req.description} found`,
-            status: 'success'
+            message: `${req.description} found in repository`,
+            status: 'success',
+            location: 'repo'
           };
         } else {
+          // File not found in repo, check organization .github repo
+          try {
+            const orgDotGithubUrl = getOrgDotGithubApiUrl(owner);
+            const orgResponse = await fetch(orgDotGithubUrl);
+            
+            if (orgResponse.ok) {
+              const orgContents = await orgResponse.json();
+              const fileExistsInOrg = orgContents.some((item: any) => 
+                item.path.toLowerCase() === req.path.toLowerCase()
+              );
+              
+              if (fileExistsInOrg) {
+                results[req.path] = {
+                  exists: true,
+                  message: `${req.description} found in organization .github repo`,
+                  status: 'success',
+                  location: 'org'
+                };
+                continue;
+              }
+            }
+          } catch (error) {
+            console.error("Error checking organization .github repo:", error);
+            // Continue with validation, we'll mark as missing
+          }
+          
+          // File not found in repo or org .github
           if (req.required) {
             missingRequired++;
+            
+            // For missing required files, create template info for PR
             results[req.path] = {
               exists: false,
               message: `Required ${req.description} is missing`,
-              status: 'error'
+              status: 'error',
+              location: 'none',
+              prUrl: `https://github.com/${owner}/${repo}/new/main?filename=${req.path}&value=`
             };
           } else {
             missingRecommended++;
             results[req.path] = {
               exists: false,
               message: `Recommended ${req.description} is missing`,
-              status: 'warning'
+              status: 'warning',
+              location: 'none'
             };
           }
         }
-      });
+      }
       
       // Set validation summary
       setValidationSummary({
-        repoName: `${repoInfo.owner}/${repoInfo.repo}`,
+        repoName: `${owner}/${repo}`,
         repoUrl: url,
-        files,
         results,
         missingRequired,
-        missingRecommended
+        missingRecommended,
+        owner,
+        repo
       });
       
     } catch (err) {
@@ -153,11 +191,39 @@ function App() {
   };
   
   // Get appropriate template for a file
-  const handleSelectTemplate = (filePath: string) => {
+  const handleSelectTemplate = async (filePath: string) => {
     const templates = getTemplatesByType(activePreset);
+    
     if (templates[filePath]) {
       setSelectedTemplate(templates[filePath]);
       setShowTemplateView(true);
+    } else {
+      // If we don't have a local template, try to fetch from GitHub
+      try {
+        setLoading(true);
+        const templateUrl = getTemplateApiUrl(filePath);
+        const response = await fetch(templateUrl);
+        
+        if (response.ok) {
+          const data = await response.json();
+          const content = atob(data.content); // Decode base64 content
+          
+          const customTemplate: FileTemplate = {
+            filename: filePath,
+            description: `${filePath} template from GitHub's open-source templates`,
+            content: content
+          };
+          
+          setSelectedTemplate(customTemplate);
+          setShowTemplateView(true);
+        } else {
+          setError(`Template for ${filePath} not found. You can create your own.`);
+        }
+      } catch (error) {
+        setError(`Error fetching template: ${error instanceof Error ? error.message : "Unknown error"}`);
+      } finally {
+        setLoading(false);
+      }
     }
   };
   
@@ -180,189 +246,194 @@ function App() {
         </p>
       </header>
       
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Repository Validation</CardTitle>
-          <CardDescription>
-            Enter a GitHub repository URL to check for required files
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <Input
-                  id="repo-url"
-                  placeholder="https://github.com/username/repository"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-              <Button 
-                onClick={handleValidate} 
-                disabled={loading || !url.trim()}
-                className="sm:w-auto w-full"
-              >
-                {loading ? (
-                  <span className="flex items-center">
-                    <span className="animate-spin mr-2">⏳</span>
-                    Scanning...
-                  </span>
-                ) : (
-                  <span className="flex items-center">
-                    <MagnifyingGlass className="mr-2" weight="bold" />
-                    Validate Repo
-                  </span>
-                )}
-              </Button>
-            </div>
-            
-            {error && (
-              <Alert variant="destructive">
-                <X className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div>
-              <h3 className="text-sm font-medium mb-2">Validation Template:</h3>
-              <Tabs value={activePreset} onValueChange={handlePresetChange}>
-                <TabsList className="grid grid-cols-3 w-full sm:w-auto">
-                  <TabsTrigger value="basic">Basic</TabsTrigger>
-                  <TabsTrigger value="javascript">JavaScript</TabsTrigger>
-                  <TabsTrigger value="python">Python</TabsTrigger>
-                </TabsList>
-                <div className="mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    {activePreset === "basic" && "Checks for essential files in any open source repository"}
-                    {activePreset === "javascript" && "Checks for JS/TS open source project requirements"}
-                    {activePreset === "python" && "Checks for Python open source project requirements"}
-                  </div>
-                </div>
-              </Tabs>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      {validationSummary && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
+      {!showTemplateView ? (
+        <>
+          <Card className="mb-8">
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <GithubLogo className="mr-2" weight="fill" />
-                Repository Structure
-              </CardTitle>
+              <CardTitle>Repository Validation</CardTitle>
               <CardDescription>
-                Files and directories found in {validationSummary.repoName}
+                Enter a GitHub repository URL to check for required files
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[300px] pr-4">
-                <ul className="space-y-2">
-                  {validationSummary.files.length > 0 ? (
-                    validationSummary.files.map((file) => (
-                      <li key={file.path} className="flex items-start">
-                        {file.type === 'dir' ? (
-                          <FolderOpen className="mr-2 text-primary mt-0.5" weight="fill" />
-                        ) : (
-                          <File className="mr-2 text-muted-foreground mt-0.5" weight="fill" />
-                        )}
-                        <div>
-                          <div className="font-medium">{file.name}</div>
-                          <div className="text-xs text-muted-foreground">{file.path}</div>
-                        </div>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-muted-foreground italic">No files found in repository</li>
-                  )}
-                </ul>
-              </ScrollArea>
+              <div className="flex flex-col space-y-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <Input
+                      id="repo-url"
+                      placeholder="https://github.com/username/repository"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleValidate} 
+                    disabled={loading || !url.trim()}
+                    className="sm:w-auto w-full"
+                  >
+                    {loading ? (
+                      <span className="flex items-center">
+                        <span className="animate-spin mr-2">⏳</span>
+                        Scanning...
+                      </span>
+                    ) : (
+                      <span className="flex items-center">
+                        <MagnifyingGlass className="mr-2" weight="bold" />
+                        Validate Repo
+                      </span>
+                    )}
+                  </Button>
+                </div>
+                
+                {error && (
+                  <Alert variant="destructive">
+                    <X className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Validation Template:</h3>
+                  <Tabs value={activePreset} onValueChange={handlePresetChange}>
+                    <TabsList className="grid grid-cols-3 w-full sm:w-auto">
+                      <TabsTrigger value="basic">Basic</TabsTrigger>
+                      <TabsTrigger value="javascript">JavaScript</TabsTrigger>
+                      <TabsTrigger value="python">Python</TabsTrigger>
+                    </TabsList>
+                    <div className="mt-4">
+                      <div className="text-sm text-muted-foreground">
+                        {activePreset === "basic" && "Checks for essential files in any open source repository"}
+                        {activePreset === "javascript" && "Checks for JS/TS open source project requirements"}
+                        {activePreset === "python" && "Checks for Python open source project requirements"}
+                      </div>
+                    </div>
+                  </Tabs>
+                </div>
+              </div>
             </CardContent>
           </Card>
           
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex justify-between">
-                <span>Validation Results</span>
-                <div className="flex gap-2">
-                  {validationSummary.missingRequired > 0 ? (
-                    <Badge variant="destructive">
-                      {validationSummary.missingRequired} required missing
-                    </Badge>
-                  ) : (
-                    <Badge variant="default" className="bg-accent">
-                      All required files present
-                    </Badge>
-                  )}
-                  {validationSummary.missingRecommended > 0 && (
-                    <Badge variant="outline" className="text-amber-500 border-amber-500">
-                      {validationSummary.missingRecommended} recommended missing
-                    </Badge>
-                  )}
-                </div>
-              </CardTitle>
-              <CardDescription>
-                Check if all required files are present
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[300px] pr-4">
-                <div className="space-y-4">
-                  {Object.entries(validationSummary.results).map(([path, result]) => (
-                    <div key={path} className="border rounded-md p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium">{path}</span>
-                        <Badge 
-                          variant={
-                            result.status === 'success' 
-                              ? 'default' 
-                              : result.status === 'warning' 
-                                ? 'outline' 
-                                : 'destructive'
-                          }
-                          className={
-                            result.status === 'warning'
-                              ? 'text-amber-500 border-amber-500'
-                              : ''
-                          }
-                        >
-                          {result.status === 'success' && (
-                            <Check className="mr-1 h-3 w-3" />
-                          )}
-                          {result.status === 'warning' && (
-                            <Warning className="mr-1 h-3 w-3" />
-                          )}
-                          {result.status === 'error' && (
-                            <X className="mr-1 h-3 w-3" />
-                          )}
-                          {result.status === 'success' ? 'Present' : result.status === 'warning' ? 'Recommended' : 'Required'}
-                        </Badge>
+          {validationSummary && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex justify-between">
+                  <span>Validation Results</span>
+                  <div className="flex gap-2">
+                    {validationSummary.missingRequired > 0 ? (
+                      <Badge variant="destructive">
+                        {validationSummary.missingRequired} required missing
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="bg-accent">
+                        All required files present
+                      </Badge>
+                    )}
+                    {validationSummary.missingRecommended > 0 && (
+                      <Badge variant="outline" className="text-amber-500 border-amber-500">
+                        {validationSummary.missingRecommended} recommended missing
+                      </Badge>
+                    )}
+                  </div>
+                </CardTitle>
+                <CardDescription>
+                  Check if all required files are present in {validationSummary.repoName}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[400px] pr-4">
+                  <div className="space-y-4">
+                    {Object.entries(validationSummary.results).map(([path, result]) => (
+                      <div key={path} className="border rounded-md p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium">{path}</span>
+                          <Badge 
+                            variant={
+                              result.status === 'success' 
+                                ? 'default' 
+                                : result.status === 'warning' 
+                                  ? 'outline' 
+                                  : 'destructive'
+                            }
+                            className={
+                              result.status === 'warning'
+                                ? 'text-amber-500 border-amber-500'
+                                : ''
+                            }
+                          >
+                            {result.status === 'success' && (
+                              <Check className="mr-1 h-3 w-3" />
+                            )}
+                            {result.status === 'warning' && (
+                              <Warning className="mr-1 h-3 w-3" />
+                            )}
+                            {result.status === 'error' && (
+                              <X className="mr-1 h-3 w-3" />
+                            )}
+                            {result.status === 'success' ? 'Present' : result.status === 'warning' ? 'Recommended' : 'Required'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{result.message}</p>
+                        
+                        {result.location === 'org' && (
+                          <div className="mt-2 text-xs bg-secondary/50 text-secondary-foreground rounded p-1">
+                            Found in organization-level .github repository
+                          </div>
+                        )}
+                        
+                        {result.status === 'error' && (
+                          <div className="mt-2 flex justify-end">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="text-xs"
+                              onClick={() => handleSelectTemplate(path)}
+                            >
+                              <FilePlus className="mr-1 h-3 w-3" />
+                              Create from template
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm text-muted-foreground">{result.message}</p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+              <CardFooter className="flex justify-between border-t pt-4">
+                <a 
+                  href={validationSummary.repoUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary text-sm hover:underline flex items-center"
+                >
+                  <GithubLogo className="mr-1" size={16} />
+                  View Repository
+                </a>
+                <div className="text-sm text-muted-foreground">
+                  Validated against {activePreset} template
                 </div>
-              </ScrollArea>
-            </CardContent>
-            <CardFooter className="flex justify-between border-t pt-4">
-              <a 
-                href={validationSummary.repoUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary text-sm hover:underline flex items-center"
-              >
-                <GithubLogo className="mr-1" size={16} />
-                View Repository
-              </a>
-              <div className="text-sm text-muted-foreground">
-                Validated against {activePreset} template
-              </div>
-            </CardFooter>
-          </Card>
+              </CardFooter>
+            </Card>
+          )}
+        </>
+      ) : (
+        <div className="mb-8">
+          <Button 
+            variant="outline" 
+            className="mb-4"
+            onClick={handleBackToResults}
+          >
+            ← Back to results
+          </Button>
+          
+          {selectedTemplate && (
+            <TemplateViewer 
+              template={selectedTemplate} 
+              repoOwner={validationSummary?.owner}
+              repoName={validationSummary?.repo}
+            />
+          )}
         </div>
       )}
       
