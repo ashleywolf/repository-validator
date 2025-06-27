@@ -97,7 +97,7 @@ export function getGitHubOAuthUrl(): string {
 export async function handleOAuthCallback(code: string, state: string): Promise<string> {
   // Verify state parameter
   if (!verifyOAuthState(state)) {
-    throw new Error("Invalid state parameter");
+    throw new Error("Invalid state parameter. Security verification failed.");
   }
   
   // Clear the stored state
@@ -127,13 +127,29 @@ export async function handleOAuthCallback(code: string, state: string): Promise<
     });
     
     if (!response.ok) {
-      throw new Error(`OAuth token exchange failed: ${response.status}`);
+      const status = response.status;
+      let errorMessage = `OAuth token exchange failed: ${status}`;
+      
+      // Add more context based on status code
+      if (status === 400) {
+        errorMessage = "Bad request (400). The authorization code may be invalid or expired.";
+      } else if (status === 401) {
+        errorMessage = "Unauthorized (401). GitHub authentication server rejected the request.";
+      } else if (status === 403) {
+        errorMessage = "Forbidden (403). Access to GitHub API may be restricted.";
+      } else if (status === 429) {
+        errorMessage = "Rate limited (429). Too many authentication attempts. Please try again later.";
+      } else if (status >= 500) {
+        errorMessage = `Server error (${status}). GitHub authentication service may be experiencing issues.`;
+      }
+      
+      throw new Error(errorMessage);
     }
     
     const data = await response.json();
     
     if (!data.access_token) {
-      throw new Error("No access token received from OAuth server");
+      throw new Error("No access token received from OAuth server. GitHub may have denied the authorization request.");
     }
     
     // Store the token
@@ -141,7 +157,9 @@ export async function handleOAuthCallback(code: string, state: string): Promise<
     return data.access_token;
   } catch (error) {
     console.error("Error exchanging code for token:", error);
-    throw new Error("Failed to complete authentication");
+    throw error instanceof Error 
+      ? error 
+      : new Error("Failed to complete GitHub authentication. Please try again.");
   }
 }
 

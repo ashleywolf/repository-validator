@@ -82,26 +82,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return true;
           } catch (error) {
             console.error("Error initializing Spark auth:", error);
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            setAuthState(prev => ({
+              ...prev,
+              loading: false,
+              error: `Failed to get user information: ${errorMessage}`
+            }));
           }
         } else {
           console.log("No Spark token available");
+          setAuthState(prev => ({
+            ...prev,
+            loading: false,
+            error: "No authentication token available from GitHub"
+          }));
         }
       } catch (error) {
         console.warn("Spark authentication not available:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        setAuthState(prev => ({
+          ...prev,
+          loading: false,
+          error: `Spark authentication error: ${errorMessage}`
+        }));
       }
       
       // If we get here, either there was no token or fetching user info failed
-      setAuthState(prev => ({
-        ...prev,
-        loading: false
-      }));
       return false;
     } catch (error) {
       console.error("Error in Spark auth:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       setAuthState(prev => ({
         ...prev,
         loading: false,
-        error: "Error initializing authentication"
+        error: `Authentication initialization error: ${errorMessage}`
       }));
       return false;
     }
@@ -129,12 +143,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error("Error initializing auth:", error);
           // Token might be invalid, clear it
           clearAccessToken();
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
           setAuthState({
             isAuthenticated: false,
             accessToken: null,
             user: null,
             loading: false,
-            error: "Session expired. Please login again."
+            error: `Session expired (${errorMessage}). Please login again.`
+          });
+          toast.error("Authentication session expired", {
+            description: "Your GitHub session is no longer valid. Please sign in again."
           });
         }
       } else {
@@ -187,11 +205,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Clean up the URL
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error) {
-          toast.error("Authentication failed");
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          toast.error("Authentication failed", {
+            description: `Error details: ${errorMessage}`
+          });
           setAuthState(prev => ({
             ...prev,
             loading: false,
-            error: error instanceof Error ? error.message : "Authentication failed"
+            error: errorMessage
           }));
         }
       }

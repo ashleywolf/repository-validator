@@ -344,7 +344,24 @@ function AppContent() {
       });
       
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unknown error occurred");
+      console.error("Validation error:", err);
+      let errorMessage = "An unknown error occurred";
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        // Check for specific API error status codes
+        if (errorMessage.includes("GitHub API error: 401")) {
+          errorMessage = "Authentication failed (401). Your access token may have expired or been revoked.";
+        } else if (errorMessage.includes("GitHub API error: 403")) {
+          errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
+        } else if (errorMessage.includes("GitHub API error: 404")) {
+          errorMessage = "Repository not found (404). Please check that the URL is correct and the repository exists.";
+        } else if (errorMessage.includes("GitHub API error: 500")) {
+          errorMessage = "GitHub server error (500). Please try again later.";
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -516,6 +533,11 @@ function AppContent() {
                     <AlertTitle>Security Clearance Required</AlertTitle>
                     <AlertDescription>
                       Sign in with GitHub to access private repositories and increase mission capabilities.
+                      {authState.error && (
+                        <div className="mt-2 text-xs text-destructive border-l-2 border-destructive pl-2">
+                          Authentication error: {authState.error}
+                        </div>
+                      )}
                     </AlertDescription>
                   </Alert>
                 )}

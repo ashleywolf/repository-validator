@@ -54,7 +54,9 @@ export const GitHubAuth: React.FC = () => {
       } else {
         // If in the Spark environment but auth failed, use public mode
         if (isSparkEnvironment()) {
-          toast.info("Using public repository access only");
+          toast.info("Using public repository access only", {
+            description: "GitHub authentication in Spark environment couldn't be completed."
+          });
         } else {
           // In regular web environment, initiate OAuth flow
           login();
@@ -62,7 +64,10 @@ export const GitHubAuth: React.FC = () => {
       }
     } catch (error) {
       console.error("Auth error:", error);
-      toast.error("Authentication failed. Using public access mode.");
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      toast.error("Authentication failed. Using public access mode.", {
+        description: `Error details: ${errorMessage}`
+      });
     } finally {
       setLoading(false);
     }
