@@ -26,6 +26,10 @@ import { ThemeProvider } from "./context/theme-context";
 import { ThemeToggle } from "./components/theme-toggle";
 import { OctocatWizard } from "./components/octocat";
 import { CreatePRButton } from "./components/create-pr-button";
+import { AuthExplainer } from "./components/auth-explainer";
+import { PatInput } from "./components/pat-input";
+import { AuthStatusBanner } from "./components/auth-status-banner";
+import { AuthDialog } from "./components/auth-dialog";
 import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -601,6 +605,8 @@ function AppContent() {
               </div>
             </CardHeader>
             <CardContent>
+              <AuthStatusBanner />
+              
               <div className="flex flex-col space-y-4">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex-1">
@@ -636,16 +642,12 @@ function AppContent() {
                 </div>
                 
                 {/* Rate limit info alert */}
-                <div className="text-xs text-muted-foreground bg-secondary/30 p-2 rounded">
+                <div className="flex justify-between items-center text-xs text-muted-foreground bg-secondary/30 p-2 rounded">
                   <p className="flex items-center">
                     <Warning className="h-3 w-3 mr-1" />
                     GitHub API has rate limits. Unauthenticated requests are limited to 60/hour.
-                    {!authState.isAuthenticated && (
-                      <Button variant="link" size="sm" className="h-auto p-0 ml-1 text-primary" onClick={handleDirectAuth}>
-                        Sign in to increase limit
-                      </Button>
-                    )}
                   </p>
+                  <AuthDialog />
                 </div>
                 
                 {/* PAT Input for SSO/SAML protected repositories */}
@@ -656,118 +658,44 @@ function AppContent() {
                       Using a personal access token for SSO/SAML repositories
                     </summary>
                     <div className="mt-2 pl-4">
-                      <p className="mb-2">If you need to access repositories protected by SSO/SAML, enter your GitHub personal access token with SSO enabled:</p>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input 
-                          type="password" 
-                          className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm placeholder:text-muted-foreground" 
-                          placeholder="ghp_xxxxxxxxxxxxxxxx" 
-                          onChange={(e) => {
-                            // Store in localStorage directly
-                            if (e.target.value && e.target.value.trim()) {
-                              localStorage.setItem("github_access_token", e.target.value.trim());
-                              toast.success("Personal access token saved", {
-                                description: "Token will be used for authentication. Refresh to apply."
-                              });
-                            }
-                          }}
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs"
-                          onClick={() => window.location.reload()}
-                        >
-                          Apply Token
-                        </Button>
-                      </div>
-                      <p className="mt-2 text-[10px]">
-                        Your token must have the <code className="bg-muted px-1 py-0.5 rounded">repo</code> scope and have SSO enabled for your organization.
-                        <a 
-                          href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary ml-1 hover:underline"
-                        >
-                          Learn more
-                        </a>
-                      </p>
+                      <PatInput />
                     </div>
                   </details>
                 </div>
                 
                 {error && (
-                  <Alert variant="destructive">
+                  <Alert variant="destructive" className="mt-4">
                     <X className="h-4 w-4" />
-                    <AlertTitle>Mission Critical Error</AlertTitle>
+                    <AlertTitle>Repository Access Error</AlertTitle>
                     <AlertDescription>
                       {error}
                       {error.includes("Access forbidden (403)") && (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <strong>Recommendation:</strong> GitHub API has rate limits for unauthenticated requests. 
-                          Sign in with GitHub to increase your rate limit and access private repositories.
+                          <p><strong>Rate limit reached:</strong> Sign in to increase your API rate limit.</p>
+                          <AuthDialog />
                         </div>
                       )}
-                      {error.includes("Authentication failed") || error.includes("Authentication required") || error.includes("private repository") ? (
+                      {(error.includes("Authentication failed") || 
+                        error.includes("Authentication required") || 
+                        error.includes("private repository")) && (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <p><strong>Repository Access:</strong> This appears to be a private repository or one protected by SSO/SAML.</p>
-                          <div className="mt-1 space-y-1">
-                            <p>For <strong>private repositories</strong>:</p>
-                            <Button 
-                              variant="link" 
-                              size="sm" 
-                              className="h-auto p-0 text-primary"
-                              onClick={handleDirectAuth}
-                            >
-                              Sign in with GitHub
-                            </Button>
-                            
-                            <p className="mt-1">For <strong>SSO/SAML protected repositories</strong>:</p>
-                            <ol className="list-decimal list-inside pl-2 space-y-1">
-                              <li>Create a <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">personal access token</a> with the <code className="text-xs bg-muted px-1 py-0.5 rounded">repo</code> scope</li>
-                              <li>Enable SSO for that token by clicking "Configure SSO" next to the token</li>
-                              <li>Authorize the token for your organization</li>
-                              <li>Use that token to sign in here</li>
-                            </ol>
-                          </div>
+                          <p><strong>Access denied:</strong> Use the appropriate authentication method.</p>
+                          <AuthDialog />
                         </div>
-                      ) : null}
+                      )}
                     </AlertDescription>
                   </Alert>
                 )}
                 
                 {!authState.isAuthenticated && (
-                  <Alert>
+                  <Alert className="bg-secondary/20 mt-4">
                     <LockOpen className="h-4 w-4" />
-                    <AlertTitle>Authentication Information</AlertTitle>
-                    <AlertDescription>
-                      <p>Sign in with GitHub to access private repositories and increase API rate limits.</p>
-                      
-                      <div className="mt-2 text-xs border-l-2 border-primary/20 pl-2 py-1">
-                        <p className="font-medium mb-1">Repository Access Options:</p>
-                        <ul className="space-y-1 list-disc list-inside">
-                          <li><strong>Public repositories:</strong> Available with basic auth</li>
-                          <li><strong>Private repositories:</strong> Require GitHub auth with appropriate scopes</li>
-                          <li><strong>SSO/SAML protected repositories:</strong> Require a personal access token with SSO enabled
-                            <Button 
-                              variant="link" 
-                              size="sm" 
-                              className="h-auto p-0 text-primary"
-                              onClick={() => {
-                                document.querySelector('details summary')?.click();
-                              }}
-                            >
-                              (Enter PAT)
-                            </Button>
-                          </li>
-                        </ul>
+                    <AlertTitle>Authentication Required</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between">
+                      <div>
+                        <p className="mb-2">Sign in with GitHub to access private repositories and increase API rate limits.</p>
                       </div>
-                      
-                      {authState.error && (
-                        <div className="mt-2 text-xs text-destructive border-l-2 border-destructive pl-2">
-                          Authentication error: {authState.error}
-                        </div>
-                      )}
+                      <AuthDialog />
                     </AlertDescription>
                   </Alert>
                 )}

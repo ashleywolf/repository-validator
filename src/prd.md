@@ -22,9 +22,9 @@
    - Success criteria: Accurate detection of missing files with clear reporting
 
 2. **GitHub Authentication**
-   - What it does: Enables access to private repositories and higher API limits
-   - Why it matters: Allows validating private repositories before making them public
-   - Success criteria: Seamless authentication with clear feedback
+   - What it does: Enables access to private repositories and higher API limits with clear guidance for different repository types
+   - Why it matters: Allows validating private repositories, SSO-protected repositories, and public repositories with appropriate permissions
+   - Success criteria: Intuitive authentication flow with clear explanations for each repository access type
 
 3. **File Compliance Checking**
    - What it does: Checks for required open source files (README, LICENSE, etc.)
@@ -123,9 +123,9 @@
 - **Contrast Goal**: WCAG AA compliance for all text and UI elements
 
 ## Edge Cases & Problem Scenarios
-- **Potential Obstacles**: API rate limiting, private repositories, large repositories
-- **Edge Case Handling**: Clear error messages with alternative authentication options
-- **Technical Constraints**: GitHub API limitations and dependency analysis complexity
+- **Potential Obstacles**: API rate limiting, private repositories, SSO/SAML-protected repositories, large repositories
+- **Edge Case Handling**: Clear error messages with guided authentication options for each repository type
+- **Technical Constraints**: GitHub API limitations, authentication complexities for different repository types, dependency analysis complexity
 
 ## Implementation Considerations
 - **Scalability Needs**: Potential to add more compliance checks and customizable requirements
