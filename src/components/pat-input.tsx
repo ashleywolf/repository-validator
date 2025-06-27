@@ -3,9 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { InfoCircledIcon } from "@radix-ui/react-icons";
+import { Key, Info } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { Key } from "@phosphor-icons/react";
 
 export const PatInput: React.FC = () => {
   const [token, setToken] = useState("");
@@ -70,7 +69,7 @@ export const PatInput: React.FC = () => {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <InfoCircledIcon className="h-3 w-3 text-muted-foreground cursor-help" />
+                    <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-[300px] p-3">
                     <p className="text-xs">
