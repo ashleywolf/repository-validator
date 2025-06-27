@@ -37,14 +37,14 @@
    - Success criteria: Results are categorized by severity and provide clear information on each requirement
 
 5. **License Validation**
-   - What it does: Checks if LICENSE file contains GitHub copyright notices
+   - What it does: Checks if LICENSE file contains GitHub copyright notices and displays the relevant copyright sentence
    - Why it matters: Ensures proper licensing and attribution
-   - Success criteria: Accurately detects GitHub copyright references in various formats
+   - Success criteria: Accurately detects and displays GitHub copyright references in various formats
 
 6. **Dependency License Analysis**
-   - What it does: Analyzes package-lock.json for GPL and AGPL dependencies
-   - Why it matters: Helps identify potentially problematic license combinations
-   - Success criteria: Accurately counts and displays GPL/AGPL dependencies
+   - What it does: Analyzes package-lock.json, package.json, and repository SBOM for license information
+   - Why it matters: Helps identify potentially problematic license combinations and provides dependency metrics
+   - Success criteria: Accurately counts and displays dependency information, including MIT licenses from SBOM
 
 7. **Template Creation**
    - What it does: Provides templates for missing required files from GitHub OSPO repository

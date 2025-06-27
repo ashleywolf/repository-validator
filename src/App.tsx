@@ -11,7 +11,8 @@ import {
   commonRequirements,
   checkLicenseFile,
   analyzeDependencies,
-  analyzePackageJson
+  analyzePackageJson,
+  analyzeSbomData
 } from "./lib/utils";
 import { FileTemplate, getTemplatesByType } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -102,6 +103,15 @@ function App() {
       let missingRequired = 0;
       let missingRecommended = 0;
       
+      // Try to fetch SBOM data
+      let sbomAnalysis = null;
+      try {
+        sbomAnalysis = await analyzeSbomData(owner, repo);
+      } catch (error) {
+        console.error("Error fetching SBOM data:", error);
+        // Continue without SBOM data
+      }
+      
       // Check each requirement
       for (const req of requirements) {
         // Check if file exists in repo - handle LICENSE.txt as alternative to LICENSE
@@ -172,6 +182,12 @@ function App() {
               } else {
                 result.dependencyAnalysis.dependenciesCount = packageJsonAnalysis.dependenciesCount;
                 result.dependencyAnalysis.devDependenciesCount = packageJsonAnalysis.devDependenciesCount;
+              }
+              
+              // Add SBOM data if available
+              if (sbomAnalysis) {
+                result.dependencyAnalysis.mitCount = sbomAnalysis.mitCount;
+                result.dependencyAnalysis.sbomDependenciesCount = sbomAnalysis.sbomDependenciesCount;
               }
             } catch (error) {
               console.error("Error analyzing package.json:", error);
@@ -478,6 +494,22 @@ function App() {
                                   <span>Total package dependencies:</span>
                                   <span className="font-medium">{result.dependencyAnalysis.dependenciesCount + result.dependencyAnalysis.devDependenciesCount}</span>
                                 </div>
+                                
+                                {/* SBOM dependency data */}
+                                {result.dependencyAnalysis.sbomDependenciesCount !== undefined && (
+                                  <>
+                                    <div className="flex justify-between col-span-2 mt-1 pt-1 border-t border-secondary/30">
+                                      <span>SBOM total dependencies:</span>
+                                      <span className="font-medium">{result.dependencyAnalysis.sbomDependenciesCount}</span>
+                                    </div>
+                                    {result.dependencyAnalysis.mitCount !== undefined && (
+                                      <div className="flex justify-between col-span-2">
+                                        <span>MIT licensed dependencies:</span>
+                                        <span className="font-medium">{result.dependencyAnalysis.mitCount}</span>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>

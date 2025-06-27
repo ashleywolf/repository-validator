@@ -30,6 +30,8 @@ export type DependencyAnalysis = {
   agplDependencies: string[];
   dependenciesCount?: number; // Count of all dependencies from package.json
   devDependenciesCount?: number; // Count of all dev dependencies from package.json
+  mitCount?: number; // Count of MIT licensed dependencies from SBOM
+  sbomDependenciesCount?: number; // Total count of dependencies from SBOM
 }
 
 export type ValidationResult = {
@@ -97,6 +99,61 @@ export function getTemplateApiUrl(filename: string): string {
   return `https://api.github.com/repos/github/github-ospo/contents/release%20template/${filename}`;
 }
 
+// Get the URL for GitHub SBOM API calls
+export function getSbomApiUrl(owner: string, repo: string): string {
+  return `https://api.github.com/repos/${owner}/${repo}/dependency-graph/sbom`;
+}
+
+// Analyze SBOM data for license information
+export async function analyzeSbomData(owner: string, repo: string): Promise<{
+  mitCount: number;
+  sbomDependenciesCount: number;
+}> {
+  try {
+    const sbomUrl = getSbomApiUrl(owner, repo);
+    const response = await fetch(sbomUrl, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error("SBOM API error:", response.status);
+      return {
+        mitCount: 0,
+        sbomDependenciesCount: 0
+      };
+    }
+    
+    const sbomData = await response.json();
+    
+    // Count dependencies and MIT licenses
+    let sbomDependenciesCount = 0;
+    let mitCount = 0;
+    
+    // Navigate SBOM structure - may vary based on actual API response
+    if (sbomData.sbom && sbomData.sbom.packages) {
+      sbomDependenciesCount = sbomData.sbom.packages.length;
+      
+      // Count MIT licenses
+      mitCount = sbomData.sbom.packages.filter((pkg: any) => {
+        return pkg.licenseConcluded === "MIT";
+      }).length;
+    }
+    
+    return {
+      mitCount,
+      sbomDependenciesCount
+    };
+  } catch (error) {
+    console.error("Error analyzing SBOM data:", error);
+    return {
+      mitCount: 0,
+      sbomDependenciesCount: 0
+    };
+  }
+}
+
 // Check if a license file contains GitHub copyright
 export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
   try {
@@ -109,54 +166,31 @@ export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
     }
     
     const fileData = await response.text();
+    let licenseText: string;
     
     try {
       // If it's a JSON response with base64 content
       const jsonData = JSON.parse(fileData);
-      const content = atob(jsonData.content); // Decode base64 content
-      
-      // Check for variations of GitHub copyright
-      const githubPatterns = [
-        /GitHub, Inc/i,
-        /GitHub Inc/i,
-        /GitHub/i
-      ];
-      
-      const containsGitHub = githubPatterns.some(pattern => pattern.test(content));
-      
-      if (containsGitHub) {
-        return {
-          isValid: true,
-          message: "License contains GitHub copyright notice"
-        };
-      } else {
-        return {
-          isValid: false,
-          message: "License does not contain GitHub copyright notice"
-        };
-      }
+      licenseText = atob(jsonData.content); // Decode base64 content
     } catch (error) {
       // If it's not a JSON response or can't be parsed as JSON
-      // Check for GitHub directly in the response text
-      const githubPatterns = [
-        /GitHub, Inc/i,
-        /GitHub Inc/i,
-        /GitHub/i
-      ];
-      
-      const containsGitHub = githubPatterns.some(pattern => pattern.test(fileData));
-      
-      if (containsGitHub) {
-        return {
-          isValid: true,
-          message: "License contains GitHub copyright notice"
-        };
-      } else {
-        return {
-          isValid: false,
-          message: "License does not contain GitHub copyright notice"
-        };
-      }
+      licenseText = fileData;
+    }
+    
+    // Find the sentence containing GitHub
+    const githubSentenceRegex = /[^.!?]*(?:GitHub|GitHub, Inc|GitHub Inc)[^.!?]*[.!?]/i;
+    const githubMatch = licenseText.match(githubSentenceRegex);
+    
+    if (githubMatch) {
+      return {
+        isValid: true,
+        message: githubMatch[0].trim()
+      };
+    } else {
+      return {
+        isValid: false,
+        message: "License does not contain GitHub copyright notice"
+      };
     }
   } catch (error) {
     console.error("Error checking license file:", error);
@@ -167,7 +201,7 @@ export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
   }
 }
 
-// Analyze package-lock.json for GPL/AGPL dependencies
+// Analyze package-lock.json for GPL/AGPL dependencies and total count
 export async function analyzeDependencies(fileUrl: string): Promise<DependencyAnalysis> {
   try {
     const response = await fetch(fileUrl);
@@ -181,6 +215,9 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
     const dependencies = content.packages || content.dependencies || {};
     const gplDependencies: string[] = [];
     const agplDependencies: string[] = [];
+    
+    // Count the actual dependencies (excluding the root package)
+    const dependencyCount = Object.keys(dependencies).filter(name => name !== '').length;
     
     // Check license in each dependency
     Object.entries(dependencies).forEach(([name, info]: [string, any]) => {
@@ -201,7 +238,7 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
     });
     
     return {
-      total: Object.keys(dependencies).length - 1, // Subtract root package
+      total: dependencyCount,
       gplCount: gplDependencies.length,
       agplCount: agplDependencies.length,
       gplDependencies,
