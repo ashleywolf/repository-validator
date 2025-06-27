@@ -14,7 +14,9 @@ import {
   rateRepoDescription,
   DescriptionRating,
   addAuthHeaders,
-  makeGitHubRequest
+  makeGitHubRequest,
+  exportSbomData,
+  scanForInternalReferences
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -350,7 +352,7 @@ function AppContent() {
       }
       
       // Add standalone dependency analysis if SBOM data exists
-      if (sbomAnalysis && !results['package.json']) {
+      if (sbomAnalysis && !results['dependency-analysis']) {
         results['dependency-analysis'] = {
           exists: true,
           message: 'Dependency analysis completed',
@@ -368,8 +370,33 @@ function AppContent() {
             agplDependencies: [],
             sbomDependenciesCount: sbomAnalysis.sbomDependenciesCount,
             mitCount: sbomAnalysis.mitCount,
-            licenseBreakdown: sbomAnalysis.licenseBreakdown
+            licenseBreakdown: sbomAnalysis.licenseBreakdown,
+            rawSbomData: sbomAnalysis.rawSbomData
           }
+        };
+      }
+      
+      // Perform scan for internal references and confidential information
+      try {
+        const internalRefsCheck = await scanForInternalReferences(owner, repo);
+        
+        results['internal-references-check'] = {
+          exists: true,
+          message: internalRefsCheck.containsInternalRefs 
+            ? 'Found potential internal references or confidential information'
+            : 'No internal references or confidential information detected',
+          status: internalRefsCheck.containsInternalRefs ? 'warning' : 'success',
+          location: 'repo',
+          internalReferences: internalRefsCheck.issues
+        };
+      } catch (error) {
+        console.error("Error scanning for internal references:", error);
+        // Add a placeholder result
+        results['internal-references-check'] = {
+          exists: false,
+          message: 'Unable to scan for internal references',
+          status: 'warning',
+          location: 'none'
         };
       }
       
@@ -796,9 +823,24 @@ function AppContent() {
                           {/* Dependency Analysis */}
                           {result.dependencyAnalysis?.licenseBreakdown && (
                             <div className="mt-2">
-                              <div className="text-xs font-medium mb-1 flex items-center">
-                                <Package className="h-3 w-3 mr-1" />
-                                Dependency Analysis:
+                              <div className="text-xs font-medium mb-1 flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <Package className="h-3 w-3 mr-1" />
+                                  Dependency Analysis:
+                                </div>
+                                {result.dependencyAnalysis.rawSbomData && (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="h-6 text-xs py-0 px-2"
+                                    onClick={() => exportSbomData(
+                                      result.dependencyAnalysis?.rawSbomData, 
+                                      validationSummary.repoName
+                                    )}
+                                  >
+                                    Export SBOM
+                                  </Button>
+                                )}
                               </div>
                               <div className="bg-secondary/20 p-2 rounded text-xs">
                                 {/* License breakdown */}
@@ -864,6 +906,91 @@ function AppContent() {
                                   </div>
                                 )}
                               </div>
+                            </div>
+                          )}
+                          
+                          {/* Internal References Check */}
+                          {result.internalReferences && (
+                            <div className="mt-2">
+                              <div className="text-xs font-medium mb-1 flex items-center">
+                                <Warning className="h-3 w-3 mr-1" />
+                                Internal References & Confidential Info Check:
+                              </div>
+                              <div className="bg-secondary/20 p-2 rounded text-xs">
+                                {result.internalReferences.length === 0 ? (
+                                  <div className="text-accent flex items-center">
+                                    <Check className="h-3 w-3 mr-1" />
+                                    No internal references or confidential information detected
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="text-amber-500 font-medium mb-1">
+                                      Potential internal references or confidential information found:
+                                    </div>
+                                    <div className="space-y-1 mt-1 bg-secondary/30 p-2 rounded">
+                                      {result.internalReferences.map((issue, index) => (
+                                        <div key={index} className="text-amber-700">
+                                          • {issue}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="mt-2 p-2 bg-amber-50 text-amber-800 rounded">
+                                      <p className="font-medium">⚠️ Warning: Review these issues before open-sourcing</p>
+                                      <p className="text-xs mt-1">
+                                        Internal references, trademarks, and confidential information should be removed prior to public release.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Repository History Squash Option */}
+                          {path === 'internal-references-check' && (
+                            <div className="mt-3 text-xs bg-secondary/20 p-2 rounded">
+                              <div className="font-medium mb-1 flex items-center">
+                                <Warning className="h-3 w-3 mr-1" />
+                                Repository History Recommendation:
+                              </div>
+                              <p className="mb-2">
+                                Consider squashing repository history before open-sourcing to remove any sensitive information
+                                from previous commits that may no longer be in the current files.
+                              </p>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="w-full mt-1 text-xs"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`
+# Commands to squash repository history
+# Run these in your local repository
+
+# Create a new orphaned branch
+git checkout --orphan temp_branch
+
+# Add all files to the new branch
+git add .
+
+# Commit the files
+git commit -m "Initial commit - Repository history squashed for open source release"
+
+# Delete the old branch
+git branch -D main
+
+# Rename the temporary branch to main
+git branch -m main
+
+# Force push to remote repository
+git push -f origin main
+                                  `.trim());
+                                  toast.success("Squash instructions copied to clipboard", {
+                                    description: "Paste in your terminal to see the commands for squashing repository history"
+                                  });
+                                }}
+                              >
+                                Copy Squash Instructions
+                              </Button>
                             </div>
                           )}
                           

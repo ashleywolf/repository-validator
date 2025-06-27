@@ -42,14 +42,24 @@
    - Success criteria: Correctly identifies copyright holders and license types
 
 6. **Dependency License Analysis**
-   - What it does: Analyzes project dependencies for license compatibility
-   - Why it matters: Prevents unexpected licensing issues from dependencies
-   - Success criteria: Highlights potential license conflicts requiring review
+   - What it does: Analyzes project dependencies for license compatibility and provides SBOM export
+   - Why it matters: Prevents unexpected licensing issues from dependencies and enables compliance documentation
+   - Success criteria: Highlights potential license conflicts requiring review and offers exportable data
 
 7. **Template-Based File Creation**
    - What it does: Provides templates for required files
    - Why it matters: Simplifies adding missing files with proper content
    - Success criteria: Easy to use templates that can be directly added to repositories
+
+8. **Internal References Check**
+   - What it does: Scans repository for internal references, confidential information, and trademarks
+   - Why it matters: Prevents accidental exposure of sensitive or internal information
+   - Success criteria: Identifies potential issues requiring review before open-sourcing
+
+9. **Repository History Management**
+   - What it does: Provides guidance on squashing repository history before open-sourcing
+   - Why it matters: Ensures sensitive information in commit history is removed
+   - Success criteria: Clear instructions for safely squashing repository history
 
 ## Design Direction
 

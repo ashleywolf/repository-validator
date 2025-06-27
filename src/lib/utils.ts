@@ -43,6 +43,7 @@ export type DependencyAnalysis = {
   sbomDependenciesCount?: number; // Total count of dependencies from SBOM
   hasCopyleft?: boolean; // Whether any copyleft licenses are present
   licenseBreakdown?: Record<string, number>; // Map of license names to counts
+  rawSbomData?: any; // Raw SBOM data for export
 }
 
 export type ValidationResult = {
@@ -55,6 +56,7 @@ export type ValidationResult = {
   dependencyAnalysis?: DependencyAnalysis;
   descriptionRating?: DescriptionRating;
   fileUrl?: string; // URL to view the file directly
+  internalReferences?: string[]; // List of internal references found
 }
 
 export type FileRequirement = {
@@ -122,6 +124,7 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
   mitCount: number;
   sbomDependenciesCount: number;
   licenseBreakdown?: Record<string, number>;
+  rawSbomData?: any; // Store raw SBOM data for export
 }> {
   try {
     const sbomUrl = getSbomApiUrl(owner, repo);
@@ -167,7 +170,8 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
       return {
         mitCount,
         sbomDependenciesCount,
-        licenseBreakdown
+        licenseBreakdown,
+        rawSbomData: sbomData // Include raw data for export functionality
       };
     } catch (error) {
       console.error("Error making request to SBOM API:", error);
@@ -186,6 +190,30 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
       sbomDependenciesCount: 0,
       licenseBreakdown: {}
     };
+  }
+}
+
+// Helper function to export SBOM data as JSON file
+export function exportSbomData(sbomData: any, repoName: string): void {
+  try {
+    // Format the data for download
+    const formattedData = JSON.stringify(sbomData, null, 2);
+    const blob = new Blob([formattedData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    // Create and click a download link
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.download = `${repoName.replace('/', '-')}-sbom.json`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    
+    // Clean up the URL object
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Error exporting SBOM data:", error);
+    throw new Error("Failed to export SBOM data");
   }
 }
 
@@ -480,6 +508,103 @@ export async function rateRepoDescription(owner: string, repo: string): Promise<
   }
 }
 
+// Scan repository code for internal references and confidential information
+export async function scanForInternalReferences(owner: string, repo: string): Promise<{
+  containsInternalRefs: boolean;
+  issues: string[];
+}> {
+  try {
+    // Since we can't scan all files in a repository easily via the API,
+    // we'll use LLM to analyze content of commonly problematic files
+    
+    // Fetch common files that might contain internal references
+    const filesToCheck = [
+      'README.md',
+      'CONTRIBUTING.md',
+      'docs/README.md',
+      'src/config.js',
+      'src/config.ts',
+      '.env.example',
+      'config/default.json',
+      'package.json'
+    ];
+    
+    const issues: string[] = [];
+    let containsInternalRefs = false;
+    
+    for (const filePath of filesToCheck) {
+      try {
+        const fileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+        const response = await makeGitHubRequest(fileUrl);
+        
+        if (!response.ok) continue; // File doesn't exist, skip
+        
+        const fileData = await response.json();
+        // Skip directories or empty files
+        if (fileData.type !== 'file' || !fileData.content) continue;
+        
+        const content = atob(fileData.content); // Decode base64 content
+        
+        // Use LLM to analyze the content for internal references
+        const prompt = spark.llmPrompt`
+          Analyze this file content for a GitHub repository that will be open-sourced.
+          
+          File path: ${filePath}
+          Content: ${content.substring(0, 4000)} ${content.length > 4000 ? '[content truncated for length]' : ''}
+          
+          Check for any of these concerning elements:
+          1. Internal company paths, tools, or codenames
+          2. Employee names or email aliases (especially internal patterns like username@company.internal)
+          3. API keys, tokens, or secrets
+          4. Internal URLs, hostnames, or IP addresses
+          5. References to proprietary or internal-only technology
+          6. Company confidential information
+          7. Trademarks or product icons/assets
+          8. References to not-yet-announced products or features
+          
+          If you find any concerning elements, provide:
+          1. A brief description of each issue found
+          2. The general location in the file (e.g., "API key in configuration section")
+          
+          Format your response as JSON:
+          {
+            "hasIssues": true|false,
+            "issues": ["issue description 1", "issue description 2", ...]
+          }
+          
+          If no issues are found, return {"hasIssues": false, "issues": []}.
+        `;
+        
+        try {
+          const analysis = await spark.llm(prompt, "gpt-4o-mini", true);
+          const result = JSON.parse(analysis);
+          
+          if (result.hasIssues) {
+            containsInternalRefs = true;
+            issues.push(...result.issues.map((issue: string) => `${filePath}: ${issue}`));
+          }
+        } catch (error) {
+          console.error(`Error analyzing ${filePath} for internal references:`, error);
+        }
+      } catch (error) {
+        console.error(`Error fetching ${filePath}:`, error);
+        continue;
+      }
+    }
+    
+    return {
+      containsInternalRefs,
+      issues
+    };
+  } catch (error) {
+    console.error("Error scanning for internal references:", error);
+    return {
+      containsInternalRefs: false,
+      issues: ["Error scanning repository files"]
+    };
+  }
+}
+
 // Analyze package.json for total dependencies
 export async function analyzePackageJson(fileUrl: string): Promise<{
   dependenciesCount: number;
@@ -525,5 +650,7 @@ export const consolidatedRequirements: FileRequirement[] = [
   { path: 'tsconfig.json', required: false, description: 'TypeScript configuration' },
   // Python specific
   { path: 'requirements.txt', required: false, description: 'Python dependencies' },
-  { path: 'setup.py', required: false, description: 'Package installation script' }
+  { path: 'setup.py', required: false, description: 'Package installation script' },
+  // Special scan elements - these don't represent actual files but additional checks
+  { path: 'internal-references-check', required: false, description: 'Internal references & confidential info check' }
 ];
