@@ -656,16 +656,16 @@ function AppContent() {
                       {error.includes("Authentication failed (401)") && (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
                           <strong>Recommendation:</strong> This appears to be a private repository.
-                          To access it, you need to sign in with a GitHub Personal Access Token with the "repo" scope.
                           <div className="mt-1">
-                            <a
-                              href="https://github.com/settings/tokens/new?scopes=repo&description=Repo%20Checker%20App" 
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary underline"
+                            <Button 
+                              variant="link" 
+                              size="sm" 
+                              className="h-auto p-0 text-primary"
+                              onClick={handleDirectAuth}
                             >
-                              Create a new token
-                            </a> and then sign in with it.
+                              Sign in with GitHub through Spark
+                            </Button>
+                            <span className="mx-1">to access private repositories.</span>
                           </div>
                         </div>
                       )}

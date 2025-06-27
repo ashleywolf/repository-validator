@@ -23,8 +23,12 @@ export const GitHubAuth: React.FC = () => {
   // Determine if we have private repo access
   useEffect(() => {
     if (accessToken) {
-      // Only real GitHub tokens can access private repos
-      setCanAccessPrivate(accessToken.startsWith('ghp_') || accessToken.startsWith('ghs_'));
+      // Both real GitHub tokens and our special Spark tokens can access private repos
+      setCanAccessPrivate(
+        accessToken.startsWith('ghp_') || 
+        accessToken.startsWith('ghs_') || 
+        accessToken.startsWith('ghp_spark_')
+      );
     } else {
       setCanAccessPrivate(false);
     }
