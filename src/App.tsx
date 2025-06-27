@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { 
   FileRequirement,
   ValidationSummary,
@@ -12,7 +12,9 @@ import {
   checkLicenseFile,
   analyzeSbomData,
   rateRepoDescription,
-  DescriptionRating
+  DescriptionRating,
+  addAuthHeaders,
+  makeGitHubRequest
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -58,6 +60,35 @@ function AppContent() {
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [descriptionRating, setDescriptionRating] = useState<DescriptionRating | null>(null);
   const [isPrivateRepo, setIsPrivateRepo] = useState(false);
+
+  // Handle direct GitHub authentication
+  const handleDirectAuth = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Try to use Spark authentication first
+      const success = await initWithSparkAuth();
+      
+      if (success) {
+        toast.success("Authenticated with GitHub via Spark");
+      } else {
+        // If in the Spark environment but auth failed, use public mode
+        if (typeof window !== 'undefined' && window.spark) {
+          toast.info("Using public repository access only");
+        } else {
+          // In regular web environment, initiate OAuth flow
+          login();
+        }
+      }
+    } catch (error) {
+      console.error("Auth error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      toast.error("Authentication failed", {
+        description: `Error details: ${errorMessage}`
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [initWithSparkAuth, login]);
 
   // Handle URL validation and repo scanning
   const handleValidate = async () => {
@@ -121,20 +152,25 @@ function AppContent() {
           }
         }
       } else {
-        // Unauthenticated API call for public repositories
-        const response = await fetch(apiUrl);
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error("Repository not found or is private. Please sign in with GitHub to access private repositories.");
-          } else if (response.status === 403) {
-            throw new Error("API rate limit exceeded. Please sign in with GitHub to increase your rate limit.");
-          } else {
-            throw new Error(`GitHub API error: ${response.status}`);
+        // Use the makeGitHubRequest helper with retries and auth handling
+        try {
+          const response = await makeGitHubRequest(apiUrl);
+          
+          if (!response.ok) {
+            if (response.status === 404) {
+              throw new Error("Repository not found or is private. Please sign in with GitHub to access private repositories.");
+            } else if (response.status === 403) {
+              throw new Error("API rate limit exceeded. Please sign in with GitHub to increase your rate limit.");
+            } else {
+              throw new Error(`GitHub API error: ${response.status}`);
+            }
           }
+          
+          repoContents = await response.json();
+        } catch (error) {
+          console.error("Error fetching repository contents:", error);
+          throw error;
         }
-        
-        repoContents = await response.json();
       }
       
       // Transform API response to our RepoFile format
@@ -257,8 +293,13 @@ function AppContent() {
                 orgContents = [];
               }
             } else {
-              const orgResponse = await fetch(orgDotGithubUrl);
-              orgContents = orgResponse.ok ? await orgResponse.json() : [];
+              try {
+                const response = await makeGitHubRequest(orgDotGithubUrl);
+                orgContents = response.ok ? await response.json() : [];
+              } catch (error) {
+                console.warn("Error checking organization .github repo:", error);
+                orgContents = [];
+              }
             }
             
             const fileExistsInOrg = orgContents.some((item: any) => 
@@ -351,9 +392,24 @@ function AppContent() {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
-          errorMessage = "Authentication failed (401). Your access token may have expired or been revoked.";
+          errorMessage = "Authentication failed (401). Your access token may have expired or been revoked. Try signing out and signing in again.";
         } else if (errorMessage.includes("GitHub API error: 403")) {
-          errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
+          errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository. Try signing in with GitHub to increase your rate limit.";
+          
+          // Show a more direct auth prompt when hitting rate limits
+          if (!authState.isAuthenticated) {
+            toast.error("GitHub API rate limit exceeded", {
+              description: "Sign in with GitHub to increase your rate limits and continue using the application.",
+              action: {
+                label: "Sign In",
+                onClick: () => {
+                  if (typeof handleDirectAuth === 'function') {
+                    handleDirectAuth();
+                  }
+                },
+              },
+            });
+          }
         } else if (errorMessage.includes("GitHub API error: 404")) {
           errorMessage = "Repository not found (404). Please check that the URL is correct and the repository exists.";
         } else if (errorMessage.includes("GitHub API error: 500")) {
@@ -393,13 +449,18 @@ function AppContent() {
             throw new Error(`Template not found: ${error instanceof Error ? error.message : "Unknown error"}`);
           }
         } else {
-          const response = await fetch(templateUrl);
-          
-          if (!response.ok) {
-            throw new Error(`Template for ${filePath} not found. You can create your own.`);
+          try {
+            const response = await makeGitHubRequest(templateUrl);
+            
+            if (!response.ok) {
+              throw new Error(`Template for ${filePath} not found. You can create your own.`);
+            }
+            
+            templateData = await response.json();
+          } catch (error) {
+            console.error("Error fetching template:", error);
+            throw error;
           }
-          
-          templateData = await response.json();
         }
         
         const content = atob(templateData.content); // Decode base64 content
@@ -519,11 +580,38 @@ function AppContent() {
                   </Button>
                 </div>
                 
+                {/* Rate limit info alert */}
+                <div className="text-xs text-muted-foreground bg-secondary/30 p-2 rounded">
+                  <p className="flex items-center">
+                    <Warning className="h-3 w-3 mr-1" />
+                    GitHub API has rate limits. Unauthenticated requests are limited to 60/hour.
+                    {!authState.isAuthenticated && (
+                      <Button variant="link" size="sm" className="h-auto p-0 ml-1 text-primary" onClick={handleDirectAuth}>
+                        Sign in to increase limit
+                      </Button>
+                    )}
+                  </p>
+                </div>
+                
                 {error && (
                   <Alert variant="destructive">
                     <X className="h-4 w-4" />
                     <AlertTitle>Mission Critical Error</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
+                    <AlertDescription>
+                      {error}
+                      {error.includes("Access forbidden (403)") && (
+                        <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
+                          <strong>Recommendation:</strong> GitHub API has rate limits for unauthenticated requests. 
+                          Sign in with GitHub to increase your rate limit and access private repositories.
+                        </div>
+                      )}
+                      {error.includes("Authentication failed (401)") && (
+                        <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
+                          <strong>Recommendation:</strong> Your current authentication session may have expired.
+                          Try signing out and signing in again with GitHub.
+                        </div>
+                      )}
+                    </AlertDescription>
                   </Alert>
                 )}
                 
@@ -533,6 +621,11 @@ function AppContent() {
                     <AlertTitle>Security Clearance Required</AlertTitle>
                     <AlertDescription>
                       Sign in with GitHub to access private repositories and increase mission capabilities.
+                      {error && error.includes("API rate limit exceeded") && (
+                        <div className="mt-2 text-xs font-medium text-amber-600">
+                          Rate limit exceeded. Authentication will help overcome this limitation.
+                        </div>
+                      )}
                       {authState.error && (
                         <div className="mt-2 text-xs text-destructive border-l-2 border-destructive pl-2">
                           Authentication error: {authState.error}

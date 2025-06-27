@@ -118,9 +118,14 @@ export const GitHubAuth: React.FC = () => {
   }
 
   return (
-    <Button onClick={handleDirectAuth} variant="outline" className="flex items-center gap-2">
-      <SignIn className="h-4 w-4" />
-      <span>Sign in with GitHub</span>
-    </Button>
+    <div>
+      <Button onClick={handleDirectAuth} variant="outline" className="flex items-center gap-2">
+        <SignIn className="h-4 w-4" />
+        <span>Sign in with GitHub</span>
+      </Button>
+      <div className="text-xs text-muted-foreground mt-1">
+        Authenticate to increase API limits
+      </div>
+    </div>
   );
 };

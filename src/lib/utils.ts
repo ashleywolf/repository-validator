@@ -125,52 +125,59 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
 }> {
   try {
     const sbomUrl = getSbomApiUrl(owner, repo);
-    const response = await fetch(sbomUrl, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json'
-      }
-    });
     
-    if (!response.ok) {
-      console.warn(`SBOM API returned status ${response.status} for ${owner}/${repo}`);
-      // Create a blank result rather than throwing an error
+    try {
+      const response = await makeGitHubRequest(sbomUrl);
+      
+      if (!response.ok) {
+        console.warn(`SBOM API returned status ${response.status} for ${owner}/${repo}`);
+        // Create a blank result rather than throwing an error
+        return {
+          mitCount: 0,
+          sbomDependenciesCount: 0,
+          licenseBreakdown: {}
+        };
+      }
+      
+      const sbomData = await response.json();
+      
+      // Count dependencies and breakdown licenses
+      let sbomDependenciesCount = 0;
+      let mitCount = 0;
+      const licenseBreakdown: Record<string, number> = {};
+      
+      // Navigate SBOM structure - may vary based on actual API response
+      if (sbomData.sbom && sbomData.sbom.packages) {
+        sbomDependenciesCount = sbomData.sbom.packages.length;
+        
+        // Process all licenses
+        sbomData.sbom.packages.forEach((pkg: any) => {
+          const license = pkg.licenseConcluded || "Unknown";
+          
+          // Count for MIT specifically
+          if (license === "MIT") {
+            mitCount++;
+          }
+          
+          // Add to breakdown
+          licenseBreakdown[license] = (licenseBreakdown[license] || 0) + 1;
+        });
+      }
+      
+      return {
+        mitCount,
+        sbomDependenciesCount,
+        licenseBreakdown
+      };
+    } catch (error) {
+      console.error("Error making request to SBOM API:", error);
+      // Return an empty result instead of throwing
       return {
         mitCount: 0,
         sbomDependenciesCount: 0,
         licenseBreakdown: {}
       };
     }
-    
-    const sbomData = await response.json();
-    
-    // Count dependencies and breakdown licenses
-    let sbomDependenciesCount = 0;
-    let mitCount = 0;
-    const licenseBreakdown: Record<string, number> = {};
-    
-    // Navigate SBOM structure - may vary based on actual API response
-    if (sbomData.sbom && sbomData.sbom.packages) {
-      sbomDependenciesCount = sbomData.sbom.packages.length;
-      
-      // Process all licenses
-      sbomData.sbom.packages.forEach((pkg: any) => {
-        const license = pkg.licenseConcluded || "Unknown";
-        
-        // Count for MIT specifically
-        if (license === "MIT") {
-          mitCount++;
-        }
-        
-        // Add to breakdown
-        licenseBreakdown[license] = (licenseBreakdown[license] || 0) + 1;
-      });
-    }
-    
-    return {
-      mitCount,
-      sbomDependenciesCount,
-      licenseBreakdown
-    };
   } catch (error) {
     console.error("Error analyzing SBOM data:", error);
     // Return an empty result instead of throwing
@@ -185,7 +192,7 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
 // Check if a license file contains GitHub copyright
 export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
   try {
-    const response = await fetch(fileUrl);
+    const response = await makeGitHubRequest(fileUrl);
     if (!response.ok) {
       return {
         isValid: false,
@@ -322,83 +329,147 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
   }
 }
 
+// Helper function to make GitHub API requests with retries and auth handling
+export async function makeGitHubRequest(url: string, maxRetries = 2): Promise<Response> {
+  let retries = 0;
+  let lastError: Error | null = null;
+  
+  while (retries <= maxRetries) {
+    try {
+      const headers = addAuthHeaders();
+      const response = await fetch(url, { headers });
+      
+      // If we get rate limited, try to get a new auth token
+      if (response.status === 403 && retries < maxRetries) {
+        console.warn(`Rate limited (403) on attempt ${retries + 1}. Retrying with new auth if available...`);
+        // Wait a bit before retrying (increasing backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+        retries++;
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      console.error(`API request failed (attempt ${retries + 1}):`, error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (retries < maxRetries) {
+        // Wait a bit before retrying (increasing backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+        retries++;
+        continue;
+      }
+      
+      // If we've exhausted our retries, throw the last error
+      throw lastError;
+    }
+  }
+  
+  // This should never be reached, but TypeScript requires a return
+  throw lastError || new Error("Failed to complete request after retries");
+}
+
+// Add auth headers for GitHub API requests
+export function addAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json'
+  };
+  
+  // Try to use token from localStorage if available
+  const token = localStorage.getItem("github_access_token");
+  if (token && !token.startsWith('spark_github_')) {
+    headers['Authorization'] = `token ${token}`;
+  }
+  
+  return headers;
+}
+
 // Rate repository description quality using LLM analysis
 export async function rateRepoDescription(owner: string, repo: string): Promise<DescriptionRating> {
   try {
     // Fetch repository information
     const repoInfoUrl = `https://api.github.com/repos/${owner}/${repo}`;
-    const response = await fetch(repoInfoUrl);
     
-    if (!response.ok) {
-      return {
-        text: "Unable to fetch repository description",
-        rating: "missing"
-      };
-    }
-    
-    const repoInfo = await response.json();
-    const description = repoInfo.description || "";
-    
-    if (!description) {
-      return {
-        text: "Repository has no description",
-        rating: "missing",
-        feedback: "Add a clear description explaining the purpose of this repository"
-      };
-    }
-    
-    // Use LLM to analyze the description quality
     try {
-      const prompt = spark.llmPrompt`
-        Rate the quality of this GitHub repository description: "${description}"
-        
-        Consider:
-        1. Clarity - Does it clearly explain what the repository is for?
-        2. Completeness - Does it cover the key functionality and purpose?
-        3. Conciseness - Is it appropriately detailed without being verbose?
-        
-        Provide:
-        1. A rating of either "great", "good", "poor" (exactly one of these words)
-        2. A brief explanation of why you gave this rating (1-2 sentences)
-        
-        Format your response as JSON with two fields:
-        {
-          "rating": "great|good|poor",
-          "feedback": "explanation here"
-        }
-      `;
+      const response = await makeGitHubRequest(repoInfoUrl);
       
-      const analysis = await spark.llm(prompt, "gpt-4o-mini", true);
-      const result = JSON.parse(analysis);
-      
-      return {
-        text: description,
-        rating: result.rating as 'great' | 'good' | 'poor',
-        feedback: result.feedback
-      };
-    } catch (error) {
-      console.error("Error using LLM for description analysis:", error);
-      
-      // Fallback to basic length check if LLM fails
-      if (description.length < 10) {
+      if (!response.ok) {
         return {
-          text: description,
-          rating: "poor",
-          feedback: "Description is too short. Add more details about what the project does."
-        };
-      } else if (description.length < 30) {
-        return {
-          text: description,
-          rating: "good",
-          feedback: "Decent description but could be more detailed."
-        };
-      } else {
-        return {
-          text: description,
-          rating: "great",
-          feedback: "Excellent description with good detail."
+          text: "Unable to fetch repository description",
+          rating: "missing"
         };
       }
+      
+      const repoInfo = await response.json();
+      const description = repoInfo.description || "";
+      
+      if (!description) {
+        return {
+          text: "Repository has no description",
+          rating: "missing",
+          feedback: "Add a clear description explaining the purpose of this repository"
+        };
+      }
+      
+      // Use LLM to analyze the description quality
+      try {
+        const prompt = spark.llmPrompt`
+          Rate the quality of this GitHub repository description: "${description}"
+          
+          Consider:
+          1. Clarity - Does it clearly explain what the repository is for?
+          2. Completeness - Does it cover the key functionality and purpose?
+          3. Conciseness - Is it appropriately detailed without being verbose?
+          
+          Provide:
+          1. A rating of either "great", "good", "poor" (exactly one of these words)
+          2. A brief explanation of why you gave this rating (1-2 sentences)
+          
+          Format your response as JSON with two fields:
+          {
+            "rating": "great|good|poor",
+            "feedback": "explanation here"
+          }
+        `;
+        
+        const analysis = await spark.llm(prompt, "gpt-4o-mini", true);
+        const result = JSON.parse(analysis);
+        
+        return {
+          text: description,
+          rating: result.rating as 'great' | 'good' | 'poor',
+          feedback: result.feedback
+        };
+      } catch (error) {
+        console.error("Error using LLM for description analysis:", error);
+        
+        // Fallback to basic length check if LLM fails
+        if (description.length < 10) {
+          return {
+            text: description,
+            rating: "poor",
+            feedback: "Description is too short. Add more details about what the project does."
+          };
+        } else if (description.length < 30) {
+          return {
+            text: description,
+            rating: "good",
+            feedback: "Decent description but could be more detailed."
+          };
+        } else {
+          return {
+            text: description,
+            rating: "great",
+            feedback: "Excellent description with good detail."
+          };
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching repository info:", error);
+      return {
+        text: "Error fetching repository description",
+        rating: "missing"
+      };
     }
   } catch (error) {
     console.error("Error rating repository description:", error);
