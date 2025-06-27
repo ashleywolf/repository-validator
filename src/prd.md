@@ -26,15 +26,30 @@
    - Why it matters: Different project types have different file requirements
    - Success criteria: Templates contain appropriate requirements for each project type
 
-3. **Repository Structure Display**
-   - What it does: Shows files and directories found in the repository
-   - Why it matters: Provides visual context of the repo's current state
-   - Success criteria: Accurately displays repo contents with visual differentiation between files and folders
+3. **Repository Structure Validation**
+   - What it does: Validates repository against selected template requirements
+   - Why it matters: Identifies missing required and recommended files
+   - Success criteria: Accurately detects files in repo and organization .github folder
 
 4. **Validation Results Display**
    - What it does: Shows validation results, highlighting missing required and recommended files
    - Why it matters: Clearly indicates compliance status and improvement opportunities
    - Success criteria: Results are categorized by severity and provide clear information on each requirement
+
+5. **License Validation**
+   - What it does: Checks if LICENSE file contains GitHub copyright notices
+   - Why it matters: Ensures proper licensing and attribution
+   - Success criteria: Accurately detects GitHub copyright references in various formats
+
+6. **Dependency License Analysis**
+   - What it does: Analyzes package-lock.json for GPL and AGPL dependencies
+   - Why it matters: Helps identify potentially problematic license combinations
+   - Success criteria: Accurately counts and displays GPL/AGPL dependencies
+
+7. **Template Creation**
+   - What it does: Provides templates for missing required files from GitHub OSPO repository
+   - Why it matters: Makes it easy to add missing files with proper content
+   - Success criteria: Templates are accessible and can be used to create PRs
 
 ## Design Direction
 

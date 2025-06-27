@@ -8,7 +8,9 @@ import {
   parseGitHubUrl,
   getOrgDotGithubApiUrl,
   getTemplateApiUrl,
-  commonRequirements
+  commonRequirements,
+  checkLicenseFile,
+  analyzeDependencies
 } from "./lib/utils";
 import { FileTemplate, getTemplatesByType } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -89,7 +91,8 @@ function App() {
         name: item.name,
         path: item.path,
         type: item.type,
-        size: item.size
+        size: item.size,
+        download_url: item.download_url
       }));
       
       // Validate files against requirements
@@ -100,17 +103,50 @@ function App() {
       // Check each requirement
       for (const req of requirements) {
         // Check if file exists in repo
-        const fileExists = files.some(file => 
+        const fileInRepo = files.find(file => 
           file.path.toLowerCase() === req.path.toLowerCase()
         );
         
+        const fileExists = !!fileInRepo;
+        
         if (fileExists) {
-          results[req.path] = {
+          const result: ValidationResult = {
             exists: true,
             message: `${req.description} found in repository`,
             status: 'success',
             location: 'repo'
           };
+          
+          // Special checks for specific files
+          if (req.path === 'LICENSE') {
+            // Check license content
+            try {
+              const licenseCheck = await checkLicenseFile(fileInRepo.download_url);
+              result.licenseCheck = licenseCheck;
+              
+              if (!licenseCheck.isValid) {
+                result.status = 'warning';
+                result.message = `${req.description} found but ${licenseCheck.message.toLowerCase()}`;
+              }
+            } catch (error) {
+              console.error("Error checking license:", error);
+            }
+          } else if (req.path === 'package-lock.json') {
+            // Analyze dependencies for GPL/AGPL licenses
+            try {
+              const dependencyAnalysis = await analyzeDependencies(fileInRepo.download_url);
+              result.dependencyAnalysis = dependencyAnalysis;
+              
+              if (dependencyAnalysis.gplCount > 0 || dependencyAnalysis.agplCount > 0) {
+                result.status = 'warning';
+                result.message = `${req.description} found with ${dependencyAnalysis.gplCount} GPL and ${dependencyAnalysis.agplCount} AGPL dependencies`;
+              }
+            } catch (error) {
+              console.error("Error analyzing dependencies:", error);
+            }
+          }
+          
+          results[req.path] = result;
         } else {
           // File not found in repo, check organization .github repo
           try {
@@ -198,7 +234,7 @@ function App() {
       setSelectedTemplate(templates[filePath]);
       setShowTemplateView(true);
     } else {
-      // If we don't have a local template, try to fetch from GitHub
+      // If we don't have a local template, try to fetch from GitHub OSPO repository
       try {
         setLoading(true);
         const templateUrl = getTemplateApiUrl(filePath);
@@ -210,7 +246,7 @@ function App() {
           
           const customTemplate: FileTemplate = {
             filename: filePath,
-            description: `${filePath} template from GitHub's open-source templates`,
+            description: `${filePath} template from GitHub's OSPO templates`,
             content: content
           };
           
@@ -371,7 +407,7 @@ function App() {
                             {result.status === 'error' && (
                               <X className="mr-1 h-3 w-3" />
                             )}
-                            {result.status === 'success' ? 'Present' : result.status === 'warning' ? 'Recommended' : 'Required'}
+                            {result.status === 'success' ? 'Present' : result.status === 'warning' ? 'Warning' : 'Required'}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">{result.message}</p>
@@ -379,6 +415,54 @@ function App() {
                         {result.location === 'org' && (
                           <div className="mt-2 text-xs bg-secondary/50 text-secondary-foreground rounded p-1">
                             Found in organization-level .github repository
+                          </div>
+                        )}
+                        
+                        {/* License check result */}
+                        {result.licenseCheck && !result.licenseCheck.isValid && (
+                          <div className="mt-2 text-xs bg-amber-100 text-amber-800 rounded p-1">
+                            {result.licenseCheck.message}
+                          </div>
+                        )}
+                        
+                        {/* Dependency analysis result */}
+                        {result.dependencyAnalysis && (result.dependencyAnalysis.gplCount > 0 || result.dependencyAnalysis.agplCount > 0) && (
+                          <div className="mt-2">
+                            <div className="text-xs font-medium mb-1">Dependency License Analysis:</div>
+                            <div className="text-xs space-y-1">
+                              <div className="flex justify-between">
+                                <span>Total Dependencies:</span>
+                                <span>{result.dependencyAnalysis.total}</span>
+                              </div>
+                              
+                              {result.dependencyAnalysis.gplCount > 0 && (
+                                <>
+                                  <div className="flex justify-between text-amber-700">
+                                    <span>GPL Dependencies:</span>
+                                    <span>{result.dependencyAnalysis.gplCount}</span>
+                                  </div>
+                                  <div className="bg-amber-50 p-1 rounded text-amber-800">
+                                    {result.dependencyAnalysis.gplDependencies.map((dep, i) => (
+                                      <div key={i}>{dep}</div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                              
+                              {result.dependencyAnalysis.agplCount > 0 && (
+                                <>
+                                  <div className="flex justify-between text-red-700">
+                                    <span>AGPL Dependencies:</span>
+                                    <span>{result.dependencyAnalysis.agplCount}</span>
+                                  </div>
+                                  <div className="bg-red-50 p-1 rounded text-red-800">
+                                    {result.dependencyAnalysis.agplDependencies.map((dep, i) => (
+                                      <div key={i}>{dep}</div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         )}
                         

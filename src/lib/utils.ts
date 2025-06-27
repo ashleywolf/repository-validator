@@ -12,6 +12,22 @@ export type RepoFile = {
   type: 'file' | 'dir';
   content?: string;
   size?: number;
+  download_url?: string;
+}
+
+// License check data
+export type LicenseCheck = {
+  isValid: boolean;
+  message: string;
+}
+
+// Dependency data
+export type DependencyAnalysis = {
+  total: number;
+  gplCount: number;
+  agplCount: number;
+  gplDependencies: string[];
+  agplDependencies: string[];
 }
 
 export type ValidationResult = {
@@ -20,6 +36,8 @@ export type ValidationResult = {
   status: 'success' | 'warning' | 'error';
   location?: 'repo' | 'org' | 'none';
   prUrl?: string;
+  licenseCheck?: LicenseCheck;
+  dependencyAnalysis?: DependencyAnalysis;
 }
 
 export type FileRequirement = {
@@ -73,7 +91,103 @@ export function getOrgDotGithubApiUrl(owner: string): string {
 
 // Get the URL for GitHub open-source templates
 export function getTemplateApiUrl(filename: string): string {
-  return `https://api.github.com/repos/github/open-source-releases/contents/templates/${filename}`;
+  // Updated to use the new template location
+  return `https://api.github.com/repos/github/github-ospo/contents/release%20template/${filename}`;
+}
+
+// Check if a license file contains GitHub copyright
+export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      return {
+        isValid: false,
+        message: "Could not retrieve license content"
+      };
+    }
+    
+    const fileData = await response.json();
+    const content = atob(fileData.content); // Decode base64 content
+    
+    // Check for variations of GitHub copyright
+    const githubPatterns = [
+      /GitHub, Inc/i,
+      /GitHub Inc/i,
+      /GitHub/i
+    ];
+    
+    const containsGitHub = githubPatterns.some(pattern => pattern.test(content));
+    
+    if (containsGitHub) {
+      return {
+        isValid: true,
+        message: "License contains GitHub copyright notice"
+      };
+    } else {
+      return {
+        isValid: false,
+        message: "License does not contain GitHub copyright notice"
+      };
+    }
+  } catch (error) {
+    console.error("Error checking license file:", error);
+    return {
+      isValid: false,
+      message: "Error analyzing license file"
+    };
+  }
+}
+
+// Analyze package-lock.json for GPL/AGPL dependencies
+export async function analyzeDependencies(fileUrl: string): Promise<DependencyAnalysis> {
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw new Error("Could not retrieve package-lock.json");
+    }
+    
+    const fileData = await response.json();
+    const content = JSON.parse(atob(fileData.content)); // Decode base64 content and parse JSON
+    
+    const dependencies = content.packages || content.dependencies || {};
+    const gplDependencies: string[] = [];
+    const agplDependencies: string[] = [];
+    
+    // Check license in each dependency
+    Object.entries(dependencies).forEach(([name, info]: [string, any]) => {
+      if (name === '') return; // Skip root package
+      
+      const license = typeof info.license === 'string' 
+        ? info.license 
+        : (info.licenses ? info.licenses.join(', ') : '');
+      
+      if (license) {
+        if (/GPL-3\.0|GPL3|GNU General Public License v3/i.test(license) && !/LGPL|Lesser/i.test(license)) {
+          gplDependencies.push(`${name.replace('node_modules/', '')}: ${license}`);
+        }
+        if (/AGPL|Affero/i.test(license)) {
+          agplDependencies.push(`${name.replace('node_modules/', '')}: ${license}`);
+        }
+      }
+    });
+    
+    return {
+      total: Object.keys(dependencies).length - 1, // Subtract root package
+      gplCount: gplDependencies.length,
+      agplCount: agplDependencies.length,
+      gplDependencies,
+      agplDependencies
+    };
+  } catch (error) {
+    console.error("Error analyzing dependencies:", error);
+    return {
+      total: 0,
+      gplCount: 0,
+      agplCount: 0,
+      gplDependencies: [],
+      agplDependencies: []
+    };
+  }
 }
 
 // Common file requirements presets
@@ -88,6 +202,7 @@ export const commonRequirements: Record<string, FileRequirement[]> = {
   ],
   javascript: [
     { path: 'package.json', required: true, description: 'NPM package configuration' },
+    { path: 'package-lock.json', required: false, description: 'NPM dependency lock file' },
     { path: 'README.md', required: true, description: 'Project documentation' },
     { path: 'LICENSE', required: true, description: 'License information' },
     { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
