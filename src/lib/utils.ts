@@ -650,7 +650,6 @@ export const consolidatedRequirements: FileRequirement[] = [
   { path: 'SECURITY.md', required: true, description: 'Security policy' },
   { path: 'CODE_OF_CONDUCT.md', required: false, description: 'Code of conduct' },
   // JavaScript/TypeScript specific
-  { path: 'package.json', required: false, description: 'NPM package configuration' },
   { path: '.eslintrc.json', required: false, description: 'ESLint configuration' },
   { path: 'tsconfig.json', required: false, description: 'TypeScript configuration' },
   // Python specific

@@ -23,7 +23,7 @@ export const GitHubAuth: React.FC = () => {
 
   useEffect(() => {
     if (authState.isAuthenticated && authState.user) {
-      // When authentication first becomes active, show appropriate toast
+      // When authentication first becomes active, determine access level
       const hasPrivateAccess = authState.accessToken && (
         authState.accessToken.startsWith('ghp_') || 
         authState.accessToken.startsWith('ghs_') || 
@@ -32,21 +32,8 @@ export const GitHubAuth: React.FC = () => {
       
       // Update the canAccessPrivate state
       setCanAccessPrivate(hasPrivateAccess);
-      
-      // Show authentication status toast with appropriate access level
-      if (hasPrivateAccess) {
-        toast.success("Authentication Verified", {
-          description: `Welcome ${authState.user.login}! You have access to both private and public repositories. You can now validate any repository you have access to.`,
-          duration: 5000
-        });
-      } else {
-        toast.success("Authentication Verified", {
-          description: `Welcome ${authState.user.login}! You have access to public repositories with increased API rate limits.`,
-          duration: 5000
-        });
-      }
     }
-  }, [authState.isAuthenticated, authState.user]);
+  }, [authState.isAuthenticated, authState.user, authState.accessToken]);
 
   // Try to authenticate with Spark user on mount
   useEffect(() => {
@@ -79,28 +66,11 @@ export const GitHubAuth: React.FC = () => {
       const success = await initWithSparkAuth();
       
       if (success) {
-        // Check if we have private repo access based on the token
-        const hasPrivateAccess = accessToken && (
-          accessToken.startsWith('ghp_') || 
-          accessToken.startsWith('ghs_') || 
-          accessToken.startsWith('ghp_spark_')
-        );
-        
-        if (hasPrivateAccess) {
-          toast.success("Authenticated with GitHub", {
-            description: "You now have access to private repositories."
-          });
-        } else {
-          toast.success("Authenticated with GitHub", {
-            description: "You can now access public repositories with higher rate limits."
-          });
-        }
+        // Already authenticated, no need for toast notification
       } else {
         // If in the Spark environment but auth failed, use public mode
         if (isSparkEnvironment()) {
-          toast.info("Using public repository access only", {
-            description: "To access private repositories, you'll need to use a GitHub Personal Access Token. The application will prompt you for one when needed."
-          });
+          console.log("Using public repository access only");
         } else {
           // In regular web environment, initiate OAuth flow
           login();
@@ -108,10 +78,6 @@ export const GitHubAuth: React.FC = () => {
       }
     } catch (error) {
       console.error("Auth error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      toast.error("Authentication failed. Using public access mode.", {
-        description: `Error details: ${errorMessage}`
-      });
     } finally {
       setLoading(false);
     }
@@ -151,7 +117,7 @@ export const GitHubAuth: React.FC = () => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel>GitHub Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="flex justify-between items-center">
             <span>Repository Access:</span>

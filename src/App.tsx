@@ -438,25 +438,13 @@ function AppContent() {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
-          errorMessage = "Authentication failed (401). This is likely a private repository that requires a Personal Access Token with appropriate permissions.";
+          errorMessage = "Authentication required. This is likely a private repository or one protected by SSO/SAML that requires appropriate authentication.";
           
-          // Show specific prompt for private repos
-          toast.error("Private Repository Access Required", {
-            description: "This appears to be a private repository. To proceed, you'll need to authenticate with a GitHub Personal Access Token that has access to this repository.",
-            action: {
-              label: "Sign In",
-              onClick: () => {
-                if (typeof handleDirectAuth === 'function') {
-                  handleDirectAuth();
-                }
-              },
-            },
-            duration: 8000,
-          });
+          // Don't show toast for this case, we'll provide clearer guidance in the alert
         } else if (errorMessage.includes("GitHub API error: 403")) {
-          errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository. Try signing in with GitHub to increase your rate limit.";
+          errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
           
-          // Show a more direct auth prompt when hitting rate limits
+          // Only show rate limit exceeded toast when not authenticated
           if (!authState.isAuthenticated) {
             toast.error("GitHub API rate limit exceeded", {
               description: "Sign in with GitHub to increase your rate limits and continue using the application.",
@@ -660,6 +648,54 @@ function AppContent() {
                   </p>
                 </div>
                 
+                {/* PAT Input for SSO/SAML protected repositories */}
+                <div className="text-xs text-muted-foreground bg-secondary/30 p-2 rounded mt-2">
+                  <details className="cursor-pointer">
+                    <summary className="flex items-center font-medium">
+                      <LockSimple className="h-3 w-3 mr-1" />
+                      Using a personal access token for SSO/SAML repositories
+                    </summary>
+                    <div className="mt-2 pl-4">
+                      <p className="mb-2">If you need to access repositories protected by SSO/SAML, enter your GitHub personal access token with SSO enabled:</p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input 
+                          type="password" 
+                          className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm placeholder:text-muted-foreground" 
+                          placeholder="ghp_xxxxxxxxxxxxxxxx" 
+                          onChange={(e) => {
+                            // Store in localStorage directly
+                            if (e.target.value && e.target.value.trim()) {
+                              localStorage.setItem("github_access_token", e.target.value.trim());
+                              toast.success("Personal access token saved", {
+                                description: "Token will be used for authentication. Refresh to apply."
+                              });
+                            }
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => window.location.reload()}
+                        >
+                          Apply Token
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-[10px]">
+                        Your token must have the <code className="bg-muted px-1 py-0.5 rounded">repo</code> scope and have SSO enabled for your organization.
+                        <a 
+                          href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary ml-1 hover:underline"
+                        >
+                          Learn more
+                        </a>
+                      </p>
+                    </div>
+                  </details>
+                </div>
+                
                 {error && (
                   <Alert variant="destructive">
                     <X className="h-4 w-4" />
@@ -672,25 +708,30 @@ function AppContent() {
                           Sign in with GitHub to increase your rate limit and access private repositories.
                         </div>
                       )}
-                      {error.includes("Authentication failed (401)") && (
+                      {error.includes("Authentication failed") || error.includes("Authentication required") || error.includes("private repository") ? (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <strong>Recommendation:</strong> This appears to be a private repository.
-                          <div className="mt-1">
+                          <p><strong>Repository Access:</strong> This appears to be a private repository or one protected by SSO/SAML.</p>
+                          <div className="mt-1 space-y-1">
+                            <p>For <strong>private repositories</strong>:</p>
                             <Button 
                               variant="link" 
                               size="sm" 
                               className="h-auto p-0 text-primary"
                               onClick={handleDirectAuth}
                             >
-                              Sign in with GitHub through Spark
+                              Sign in with GitHub
                             </Button>
-                            <span className="mx-1">to access private repositories.</span>
-                          </div>
-                          <div className="mt-1">
-                            <p>In the Spark environment, authentication happens automatically for repositories you have access to.</p>
+                            
+                            <p className="mt-1">For <strong>SSO/SAML protected repositories</strong>:</p>
+                            <ol className="list-decimal list-inside pl-2 space-y-1">
+                              <li>Create a <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">personal access token</a> with the <code className="text-xs bg-muted px-1 py-0.5 rounded">repo</code> scope</li>
+                              <li>Enable SSO for that token by clicking "Configure SSO" next to the token</li>
+                              <li>Authorize the token for your organization</li>
+                              <li>Use that token to sign in here</li>
+                            </ol>
                           </div>
                         </div>
-                      )}
+                      ) : null}
                     </AlertDescription>
                   </Alert>
                 )}
@@ -698,23 +739,35 @@ function AppContent() {
                 {!authState.isAuthenticated && (
                   <Alert>
                     <LockOpen className="h-4 w-4" />
-                    <AlertTitle>Security Clearance Required</AlertTitle>
+                    <AlertTitle>Authentication Information</AlertTitle>
                     <AlertDescription>
-                      Sign in with GitHub to access private repositories and increase mission capabilities.
-                      {error && error.includes("API rate limit exceeded") && (
-                        <div className="mt-2 text-xs font-medium text-amber-600">
-                          Rate limit exceeded. Authentication will help overcome this limitation.
-                        </div>
-                      )}
+                      <p>Sign in with GitHub to access private repositories and increase API rate limits.</p>
+                      
+                      <div className="mt-2 text-xs border-l-2 border-primary/20 pl-2 py-1">
+                        <p className="font-medium mb-1">Repository Access Options:</p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li><strong>Public repositories:</strong> Available with basic auth</li>
+                          <li><strong>Private repositories:</strong> Require GitHub auth with appropriate scopes</li>
+                          <li><strong>SSO/SAML protected repositories:</strong> Require a personal access token with SSO enabled
+                            <Button 
+                              variant="link" 
+                              size="sm" 
+                              className="h-auto p-0 text-primary"
+                              onClick={() => {
+                                document.querySelector('details summary')?.click();
+                              }}
+                            >
+                              (Enter PAT)
+                            </Button>
+                          </li>
+                        </ul>
+                      </div>
+                      
                       {authState.error && (
                         <div className="mt-2 text-xs text-destructive border-l-2 border-destructive pl-2">
                           Authentication error: {authState.error}
                         </div>
                       )}
-                      <div className="mt-2 text-xs border-l-2 border-primary/20 pl-2 py-1">
-                        <strong>Private Repository Access:</strong> When using the Spark environment, 
-                        private repositories can be accessed through the Spark authentication system.
-                      </div>
                     </AlertDescription>
                   </Alert>
                 )}
