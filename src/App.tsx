@@ -25,7 +25,9 @@ import {
   X, 
   Warning, 
   FilePlus,
-  FileText
+  FileText,
+  FolderOpen,
+  File
 } from "@phosphor-icons/react";
 
 function App() {
