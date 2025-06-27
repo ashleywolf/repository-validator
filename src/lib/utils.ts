@@ -441,7 +441,6 @@ export async function analyzePackageJson(fileUrl: string): Promise<{
 export const consolidatedRequirements: FileRequirement[] = [
   { path: 'README.md', required: true, description: 'Project documentation' },
   { path: 'LICENSE', required: true, description: 'License information' },
-  { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
   { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
   { path: 'SUPPORT.md', required: true, description: 'Support information' },
   { path: 'SECURITY.md', required: true, description: 'Security policy' },
@@ -449,7 +448,6 @@ export const consolidatedRequirements: FileRequirement[] = [
   { path: 'CODE_OF_CONDUCT.md', required: false, description: 'Code of conduct' },
   // JavaScript/TypeScript specific
   { path: 'package.json', required: false, description: 'NPM package configuration' },
-  { path: 'package-lock.json', required: false, description: 'NPM dependency lock file' },
   { path: '.eslintrc.json', required: false, description: 'ESLint configuration' },
   { path: 'tsconfig.json', required: false, description: 'TypeScript configuration' },
   // Python specific

@@ -75,3 +75,61 @@
   --radius-2xl: calc(var(--radius) * 3);
   --radius-full: 9999px;
 }
+
+/* Octocat animations */
+@keyframes bounce-gentle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes blink {
+  0%, 97% { opacity: 1; }
+  98%, 99% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes wiggle-slow {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(3deg); }
+  75% { transform: rotate(-3deg); }
+}
+
+@keyframes sparkle {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+@keyframes twinkle-delay {
+  0%, 100% { opacity: 0.8; }
+  70% { opacity: 1; }
+}
+
+.animate-bounce-gentle {
+  animation: bounce-gentle 3s ease-in-out infinite;
+}
+
+.animate-blink {
+  animation: blink 5s infinite;
+}
+
+.animate-wiggle-slow {
+  animation: wiggle-slow 4s ease-in-out infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+.animate-twinkle {
+  animation: twinkle 3s ease-in-out infinite;
+}
+
+.animate-twinkle-delay {
+  animation: twinkle-delay 3s ease-in-out infinite;
+}

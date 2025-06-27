@@ -10,8 +10,6 @@ import {
   getTemplateApiUrl,
   consolidatedRequirements,
   checkLicenseFile,
-  analyzeDependencies,
-  analyzePackageJson,
   analyzeSbomData,
   rateRepoDescription,
   DescriptionRating
@@ -20,6 +18,9 @@ import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
 import { GitHubAuth } from "./components/github-auth";
 import { AuthProvider, useAuth } from "./context/auth-context";
+import { OctocatWizard } from "./components/octocat";
+import { CreatePRButton } from "./components/create-pr-button";
+import { Toaster } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +41,7 @@ import {
   Star,
   StarHalf,
   LinkSimple,
-  FolderOpen,
+  Folder,
   LockSimple,
   LockOpen
 } from "@phosphor-icons/react";
@@ -164,15 +165,8 @@ function AppContent() {
       
       // Check each requirement
       for (const req of requirements) {
-        // Check if file exists in repo - handle LICENSE.txt as alternative to LICENSE
-        const isLicenseReq = req.path === 'LICENSE' || req.path === 'LICENSE.txt';
-        
+        // Check if file exists in repo - handle LICENSE as the only license file
         const fileInRepo = files.find(file => {
-          // For license files, match either LICENSE or LICENSE.txt
-          if (isLicenseReq) {
-            return file.path === 'LICENSE' || file.path === 'LICENSE.txt';
-          }
-          // For other files, exact match
           return file.path.toLowerCase() === req.path.toLowerCase();
         });
         
@@ -188,7 +182,7 @@ function AppContent() {
           };
           
           // Special checks for specific files
-          if (fileInRepo.path === 'LICENSE' || fileInRepo.path === 'LICENSE.txt') {
+          if (fileInRepo.path === 'LICENSE') {
             // Check license content
             try {
               const licenseCheck = await checkLicenseFile(fileInRepo.download_url);
@@ -201,50 +195,44 @@ function AppContent() {
             } catch (error) {
               console.error("Error checking license:", error);
             }
-          } else if (fileInRepo.path === 'package-lock.json') {
-            // Analyze dependencies for GPL/AGPL licenses
-            try {
-              const dependencyAnalysis = await analyzeDependencies(fileInRepo.download_url);
-              result.dependencyAnalysis = dependencyAnalysis;
-              
-              if (dependencyAnalysis.hasCopyleft) {
-                result.status = 'warning';
-                result.message = `${req.description} found with copyleft licenses that require review`;
-              }
-            } catch (error) {
-              console.error("Error analyzing dependencies:", error);
+          }
+          
+          // Add SBOM data to the appropriate result
+          if (sbomAnalysis && req.path === 'package.json') {
+            if (!result.dependencyAnalysis) {
+              result.dependencyAnalysis = {
+                total: 0,
+                gplCount: 0,
+                agplCount: 0,
+                gplDependencies: [],
+                agplDependencies: [],
+                sbomDependenciesCount: sbomAnalysis.sbomDependenciesCount,
+                mitCount: sbomAnalysis.mitCount
+              };
             }
-          } else if (fileInRepo.path === 'package.json') {
-            // Analyze package.json for dependency counts
-            try {
-              const packageJsonAnalysis = await analyzePackageJson(fileInRepo.download_url);
+            
+            // Add license breakdown from SBOM data
+            if (sbomAnalysis.licenseBreakdown) {
+              result.dependencyAnalysis.licenseBreakdown = sbomAnalysis.licenseBreakdown;
               
-              // Store the dependency counts in the dependencyAnalysis field
-              if (!result.dependencyAnalysis) {
-                result.dependencyAnalysis = {
-                  total: 0,
-                  gplCount: 0,
-                  agplCount: 0,
-                  gplDependencies: [],
-                  agplDependencies: [],
-                  dependenciesCount: packageJsonAnalysis.dependenciesCount,
-                  devDependenciesCount: packageJsonAnalysis.devDependenciesCount
-                };
-              } else {
-                result.dependencyAnalysis.dependenciesCount = packageJsonAnalysis.dependenciesCount;
-                result.dependencyAnalysis.devDependenciesCount = packageJsonAnalysis.devDependenciesCount;
-              }
-              
-              // Add SBOM data if available
-              if (sbomAnalysis) {
-                result.dependencyAnalysis.mitCount = sbomAnalysis.mitCount;
-                result.dependencyAnalysis.sbomDependenciesCount = sbomAnalysis.sbomDependenciesCount;
-                if (sbomAnalysis.licenseBreakdown) {
-                  result.dependencyAnalysis.licenseBreakdown = sbomAnalysis.licenseBreakdown;
+              // Check for GPL/AGPL licenses in SBOM data
+              let hasWarningLicenses = false;
+              for (const [license, count] of Object.entries(sbomAnalysis.licenseBreakdown)) {
+                const licenseType = license.toLowerCase();
+                if (
+                  (licenseType.includes('gpl') && !licenseType.includes('lgpl')) || 
+                  licenseType.includes('agpl') || 
+                  licenseType === 'unknown'
+                ) {
+                  hasWarningLicenses = true;
+                  break;
                 }
               }
-            } catch (error) {
-              console.error("Error analyzing package.json:", error);
+              
+              if (hasWarningLicenses) {
+                result.status = 'warning';
+                result.message = `${req.description} found with dependencies that require license review`;
+              }
             }
           }
           
@@ -317,6 +305,30 @@ function AppContent() {
             };
           }
         }
+      }
+      
+      // Add standalone dependency analysis if SBOM data exists
+      if (sbomAnalysis && !results['package.json']) {
+        results['dependency-analysis'] = {
+          exists: true,
+          message: 'Dependency analysis completed',
+          status: sbomAnalysis.licenseBreakdown && 
+            Object.keys(sbomAnalysis.licenseBreakdown).some(license => 
+              (license.toLowerCase().includes('gpl') && !license.toLowerCase().includes('lgpl')) || 
+              license.toLowerCase().includes('agpl') || 
+              license.toLowerCase() === 'unknown'
+            ) ? 'warning' : 'success',
+          dependencyAnalysis: {
+            total: sbomAnalysis.sbomDependenciesCount,
+            gplCount: 0,
+            agplCount: 0,
+            gplDependencies: [],
+            agplDependencies: [],
+            sbomDependenciesCount: sbomAnalysis.sbomDependenciesCount,
+            mitCount: sbomAnalysis.mitCount,
+            licenseBreakdown: sbomAnalysis.licenseBreakdown
+          }
+        };
       }
       
       // Set validation summary
@@ -433,8 +445,8 @@ function AppContent() {
   return (
     <div className="container mx-auto py-10 px-4">
       <header className="text-center mb-10">
-        <div className="flex items-center justify-center mb-4">
-          <GithubLogo size={40} weight="duotone" className="text-primary mr-2" />
+        <div className="flex flex-col items-center justify-center mb-4">
+          <OctocatWizard size={120} className="mb-4" />
           <h1 className="text-3xl font-bold">GitHub Repo Wizard</h1>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
@@ -522,7 +534,7 @@ function AppContent() {
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="bg-secondary/50">
-                        <FolderOpen className="mr-1 h-3 w-3" />
+                        <Folder className="mr-1 h-3 w-3" />
                         Public
                       </Badge>
                     )}
@@ -663,117 +675,75 @@ function AppContent() {
                             </div>
                           )}
                           
-                          {/* Package.json dependency count */}
-                          {result.dependencyAnalysis?.dependenciesCount !== undefined && (
+                          {/* Dependency Analysis */}
+                          {result.dependencyAnalysis?.licenseBreakdown && (
                             <div className="mt-2">
                               <div className="text-xs font-medium mb-1 flex items-center">
                                 <Package className="h-3 w-3 mr-1" />
                                 Dependency Analysis:
                               </div>
                               <div className="bg-secondary/20 p-2 rounded text-xs">
-                                <div className="grid grid-cols-2 gap-1">
-                                  <div className="flex justify-between">
-                                    <span>Production dependencies:</span>
-                                    <span className="font-medium">{result.dependencyAnalysis.dependenciesCount}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span>Dev dependencies:</span>
-                                    <span className="font-medium">{result.dependencyAnalysis.devDependenciesCount}</span>
-                                  </div>
-                                  <div className="flex justify-between col-span-2">
-                                    <span>Total package dependencies:</span>
-                                    <span className="font-medium">{result.dependencyAnalysis.dependenciesCount + (result.dependencyAnalysis.devDependenciesCount || 0)}</span>
-                                  </div>
-                                  
-                                  {/* License breakdown */}
-                                  {result.dependencyAnalysis.licenseBreakdown && 
-                                   Object.keys(result.dependencyAnalysis.licenseBreakdown).length > 0 && (
-                                    <div className="col-span-2 mt-2 pt-2 border-t border-secondary/30">
-                                      <div className="font-medium mb-1">License Breakdown:</div>
-                                      <div className="space-y-1">
-                                        {Object.entries(result.dependencyAnalysis.licenseBreakdown)
-                                          .sort(([, countA], [, countB]) => (countB as number) - (countA as number))
-                                          .map(([license, count], index) => (
+                                {/* License breakdown */}
+                                {result.dependencyAnalysis.licenseBreakdown && 
+                                  Object.keys(result.dependencyAnalysis.licenseBreakdown).length > 0 && (
+                                  <div className="col-span-2 mb-2">
+                                    <div className="font-medium mb-1">License Breakdown:</div>
+                                    <div className="space-y-1">
+                                      {Object.entries(result.dependencyAnalysis.licenseBreakdown)
+                                        .sort(([, countA], [, countB]) => (countB as number) - (countA as number))
+                                        .map(([license, count], index) => {
+                                          const isWarningLicense = 
+                                            (license.toLowerCase().includes('gpl') && !license.toLowerCase().includes('lgpl')) || 
+                                            license.toLowerCase().includes('agpl') || 
+                                            license.toLowerCase() === 'unknown';
+                                          
+                                          return (
                                             <div key={index} className="flex justify-between">
-                                              <span className={license.toLowerCase().includes('gpl') && !license.toLowerCase().includes('lgpl') ? 'text-amber-700 font-medium' : ''}>
+                                              <span className={isWarningLicense ? 'text-amber-700 font-medium' : ''}>
                                                 {license || 'Unknown'}:
+                                                {isWarningLicense && (
+                                                  <span className="ml-1 text-amber-700">
+                                                    <Warning className="inline h-3 w-3" />
+                                                  </span>
+                                                )}
                                               </span>
                                               <span className="font-medium">{count}</span>
                                             </div>
-                                          ))
-                                        }
-                                      </div>
+                                          );
+                                        })}
                                     </div>
-                                  )}
-                                  
-                                  {/* SBOM dependency data */}
-                                  {result.dependencyAnalysis.sbomDependenciesCount !== undefined && (
-                                    <>
-                                      <div className="flex justify-between col-span-2 mt-1 pt-1 border-t border-secondary/30">
-                                        <span>SBOM total dependencies:</span>
-                                        <span className="font-medium">{result.dependencyAnalysis.sbomDependenciesCount}</span>
-                                      </div>
-                                      {result.dependencyAnalysis.mitCount !== undefined && (
-                                        <div className="flex justify-between col-span-2">
-                                          <span>MIT licensed dependencies:</span>
-                                          <span className="font-medium">{result.dependencyAnalysis.mitCount}</span>
-                                        </div>
-                                      )}
-                                      
-                                      {/* SBOM License breakdown */}
-                                      {result.dependencyAnalysis.licenseBreakdown && 
-                                       Object.keys(result.dependencyAnalysis.licenseBreakdown).length > 0 && (
-                                        <div className="col-span-2 mt-2 pt-2 border-t border-secondary/30">
-                                          <div className="font-medium mb-1">SBOM License Breakdown:</div>
-                                          <div className="space-y-1">
-                                            {Object.entries(result.dependencyAnalysis.licenseBreakdown)
-                                              .sort(([, countA], [, countB]) => (countB as number) - (countA as number))
-                                              .map(([license, count], index) => (
-                                                <div key={`sbom-${index}`} className="flex justify-between">
-                                                  <span className={license.toLowerCase().includes('gpl') && !license.toLowerCase().includes('lgpl') ? 'text-amber-700 font-medium' : ''}>
-                                                    {license || 'Unknown'}:
-                                                  </span>
-                                                  <span className="font-medium">{count}</span>
-                                                </div>
-                                              ))
-                                            }
-                                          </div>
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Dependency analysis result - warning for copyleft */}
-                          {result.dependencyAnalysis && (result.dependencyAnalysis.gplCount > 0 || result.dependencyAnalysis.agplCount > 0) && (
-                            <div className="mt-2">
-                              <div className="text-xs font-medium mb-1 text-amber-700">Copyleft License Warning:</div>
-                              <div className="text-xs bg-amber-50 p-2 rounded text-amber-800">
-                                <p className="font-medium mb-1">This package contains copyleft licensed dependencies that require review!</p>
-                                
-                                {result.dependencyAnalysis.gplCount > 0 && (
-                                  <>
-                                    <div className="font-medium mt-1">GPL Dependencies ({result.dependencyAnalysis.gplCount}):</div>
-                                    <ul className="list-disc pl-4">
-                                      {result.dependencyAnalysis.gplDependencies.map((dep, i) => (
-                                        <li key={i}>{dep}</li>
-                                      ))}
-                                    </ul>
-                                  </>
+                                  </div>
                                 )}
                                 
-                                {result.dependencyAnalysis.agplCount > 0 && (
-                                  <>
-                                    <div className="font-medium mt-1">AGPL Dependencies ({result.dependencyAnalysis.agplCount}):</div>
-                                    <ul className="list-disc pl-4">
-                                      {result.dependencyAnalysis.agplDependencies.map((dep, i) => (
-                                        <li key={i}>{dep}</li>
-                                      ))}
-                                    </ul>
-                                  </>
+                                {/* SBOM dependency counts */}
+                                {result.dependencyAnalysis.sbomDependenciesCount !== undefined && (
+                                  <div className="grid grid-cols-2 gap-1">
+                                    <div className="flex justify-between col-span-2">
+                                      <span>Total dependencies:</span>
+                                      <span className="font-medium">{result.dependencyAnalysis.sbomDependenciesCount}</span>
+                                    </div>
+                                    {result.dependencyAnalysis.mitCount !== undefined && (
+                                      <div className="flex justify-between col-span-2">
+                                        <span>MIT licensed dependencies:</span>
+                                        <span className="font-medium">{result.dependencyAnalysis.mitCount}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                
+                                {/* Dependency warning */}
+                                {Object.entries(result.dependencyAnalysis.licenseBreakdown || {}).some(
+                                  ([license]) => 
+                                    (license.toLowerCase().includes('gpl') && !license.toLowerCase().includes('lgpl')) || 
+                                    license.toLowerCase().includes('agpl') || 
+                                    license.toLowerCase() === 'unknown'
+                                ) && (
+                                  <div className="mt-2 p-2 bg-amber-50 text-amber-800 rounded">
+                                    <p className="font-medium">⚠️ Warning: Dependencies with copyleft or unknown licenses detected</p>
+                                    <p className="text-xs mt-1">
+                                      These licenses may have requirements that affect your code distribution. Review them carefully.
+                                    </p>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -781,12 +751,17 @@ function AppContent() {
                           
                           {result.status === 'error' && (
                             <div className="mt-2 flex justify-end">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="text-xs"
-                                onClick={() => handleSelectTemplate(path)}
-                              >
+                              <CreatePRButton 
+                                filePath={path}
+                                owner={validationSummary.owner}
+                                repo={validationSummary.repo}
+                                onSelectTemplate={(template) => {
+                                  setSelectedTemplate(template);
+                                  setShowTemplateView(true);
+                                }}
+                              />
+                            </div>
+                          )}
                                 <FilePlus className="mr-1 h-3 w-3" />
                                 Create from template
                               </Button>
@@ -843,6 +818,7 @@ function App() {
   return (
     <AuthProvider>
       <AppContent />
+      <Toaster position="top-right" />
     </AuthProvider>
   );
 }

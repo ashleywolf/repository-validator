@@ -21,6 +21,7 @@ const GITHUB_SCOPES = "repo";
 
 // GitHub OAuth client details (using spark environment for secure handling)
 const GITHUB_CLIENT_ID = "Iv1.2ae0966f7a6cd0d7"; // This is a public value, used for client-side OAuth flow
+const GITHUB_OAUTH_PROXY = "https://github-oauth-bridge.vercel.app/api/auth";
 
 /**
  * Generate a state parameter for OAuth security
@@ -102,19 +103,27 @@ export async function handleOAuthCallback(code: string, state: string): Promise<
   clearOAuthState();
   
   try {
-    // Use spark to handle the token exchange server-side
-    // This approach protects the client secret by using server functions
-    const tokenResponse = await window.spark.llm(
-      window.spark.llmPrompt`Please exchange this GitHub OAuth code for an access token: ${code}. 
-      I need this for the GitHub API to authenticate users in my GitHub Repo Wizard app.
-      Format the response as just the access token with no additional text.`,
-      "gpt-4o-mini",
-      true
-    );
+    // Use OAuth proxy to exchange the code for an access token
+    const response = await fetch(`${GITHUB_OAUTH_PROXY}?code=${code}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error("OAuth token exchange failed");
+    }
+    
+    const data = await response.json();
+    
+    if (!data.access_token) {
+      throw new Error("No access token received");
+    }
     
     // Store the token
-    storeAccessToken(tokenResponse);
-    return tokenResponse;
+    storeAccessToken(data.access_token);
+    return data.access_token;
   } catch (error) {
     console.error("Error exchanging code for token:", error);
     throw new Error("Failed to complete authentication");
