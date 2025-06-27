@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SignIn, SignOut, User, Check } from "@phosphor-icons/react";
-import { getSparkAuthToken } from "../lib/auth";
+import { getSparkAuthToken, isSparkEnvironment } from "../lib/auth";
 import { toast } from "sonner";
 
 export const GitHubAuth: React.FC = () => {
@@ -21,21 +21,44 @@ export const GitHubAuth: React.FC = () => {
 
   // Try to authenticate with Spark user on mount
   useEffect(() => {
-    if (!isAuthenticated && !authLoading && !loading) {
-      initWithSparkAuth();
-    }
+    const attemptAuth = async () => {
+      if (!isAuthenticated && !authLoading && !loading) {
+        try {
+          setLoading(true);
+          const success = await initWithSparkAuth();
+          if (success) {
+            console.log("Successfully authenticated with Spark on load");
+          } else {
+            console.log("Could not authenticate with Spark on load");
+          }
+        } catch (error) {
+          console.error("Error during initial auth:", error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    
+    attemptAuth();
   }, [isAuthenticated, authLoading, loading, initWithSparkAuth]);
   
   const handleDirectAuth = async () => {
     try {
       setLoading(true);
+      
+      // First try to use Spark authentication
       const success = await initWithSparkAuth();
+      
       if (success) {
         toast.success("Authenticated with GitHub via Spark");
       } else {
-        // If Spark auth fails, use anonymous mode for public repos
-        toast.info("Using public repository access only");
-        // Don't fall back to OAuth automatically as it may not work in this environment
+        // If in the Spark environment but auth failed, use public mode
+        if (isSparkEnvironment()) {
+          toast.info("Using public repository access only");
+        } else {
+          // In regular web environment, initiate OAuth flow
+          login();
+        }
       }
     } catch (error) {
       console.error("Auth error:", error);

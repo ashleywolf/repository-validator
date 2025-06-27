@@ -64,6 +64,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (token) {
           try {
             const user = await fetchUserInfo(token);
+            
+            // Set authentication state with user info
             setAuthState({
               isAuthenticated: true,
               accessToken: token,
@@ -72,12 +74,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               error: null
             });
             
+            // Create octokit instance for API requests
             const oktokitInstance = createOctokit(token);
             setOctokit(oktokitInstance);
+            
+            console.log("Successfully authenticated with Spark");
             return true;
           } catch (error) {
             console.error("Error initializing Spark auth:", error);
           }
+        } else {
+          console.log("No Spark token available");
         }
       } catch (error) {
         console.warn("Spark authentication not available:", error);

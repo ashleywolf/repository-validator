@@ -153,28 +153,31 @@ export async function fetchUserInfo(accessToken: string): Promise<GitHubUser> {
     // First attempt to use Spark's user info if we have a Spark token
     if (accessToken.startsWith('spark_github_')) {
       try {
-        const sparkUser = await spark.user();
-        if (sparkUser) {
-          return {
-            login: sparkUser.login || 'github-user',
-            avatar_url: sparkUser.avatarUrl || 'https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png',
-            name: sparkUser.login || null,
-            html_url: `https://github.com/${sparkUser.login || ''}`
-          };
+        if (isSparkEnvironment()) {
+          const sparkUser = await spark.user();
+          if (sparkUser) {
+            return {
+              login: sparkUser.login || 'github-user',
+              avatar_url: sparkUser.avatarUrl || 'https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png',
+              name: sparkUser.login || null,
+              html_url: `https://github.com/${sparkUser.login || ''}`
+            };
+          }
         }
       } catch (e) {
         console.error("Error getting Spark user:", e);
-        // Create a default user rather than failing
-        return {
-          login: 'github-user',
-          avatar_url: 'https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png',
-          name: 'GitHub User',
-          html_url: 'https://github.com'
-        };
       }
+      
+      // Create a default user if Spark user info fails
+      return {
+        login: 'github-user',
+        avatar_url: 'https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png',
+        name: 'GitHub User',
+        html_url: 'https://github.com'
+      };
     }
     
-    // Fallback to regular GitHub API
+    // Fallback to regular GitHub API for non-Spark tokens
     const octokit = new Octokit({ auth: accessToken });
     const { data } = await octokit.request("GET /user");
     
@@ -240,14 +243,31 @@ export function createOctokit(accessToken: string | null): Octokit | null {
   return new Octokit({ auth: accessToken });
 }
 
-// For a more direct auth approach, provide this method
+/**
+ * Check if we're in the Spark environment
+ */
+export function isSparkEnvironment(): boolean {
+  return typeof window !== 'undefined' && 
+         typeof (window as any).spark !== 'undefined' && 
+         typeof (window as any).spark.user === 'function';
+}
+
+/**
+ * For a more direct auth approach, provide this method
+ */
 export async function getSparkAuthToken(): Promise<string | null> {
   try {
-    const user = await spark.user();
-    if (user && user.id) {
-      const token = `spark_github_${user.id}_${Date.now()}`;
-      storeAccessToken(token);
-      return token;
+    // Check if we're in the Spark environment
+    if (isSparkEnvironment()) {
+      const user = await spark.user();
+      if (user && user.id) {
+        // Create a token format that we can identify later
+        const token = `spark_github_${user.id}_${Date.now()}`;
+        storeAccessToken(token);
+        return token;
+      }
+    } else {
+      console.log("Spark object not available in this environment");
     }
     return null;
   } catch (e) {
