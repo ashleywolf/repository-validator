@@ -10,14 +10,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SignIn, SignOut, User, Check } from "@phosphor-icons/react";
+import { SignIn, SignOut, User, Check, LockSimple, LockOpen } from "@phosphor-icons/react";
 import { getSparkAuthToken, isSparkEnvironment } from "../lib/auth";
 import { toast } from "sonner";
 
 export const GitHubAuth: React.FC = () => {
   const { authState, login, logout, initWithSparkAuth } = useAuth();
-  const { isAuthenticated, user, loading: authLoading } = authState;
+  const { isAuthenticated, user, loading: authLoading, accessToken } = authState;
   const [loading, setLoading] = useState(false);
+  const [canAccessPrivate, setCanAccessPrivate] = useState(false);
+
+  // Determine if we have private repo access
+  useEffect(() => {
+    if (accessToken) {
+      // Only real GitHub tokens can access private repos
+      setCanAccessPrivate(accessToken.startsWith('ghp_') || accessToken.startsWith('ghs_'));
+    } else {
+      setCanAccessPrivate(false);
+    }
+  }, [accessToken]);
 
   // Try to authenticate with Spark user on mount
   useEffect(() => {
@@ -55,7 +66,7 @@ export const GitHubAuth: React.FC = () => {
         // If in the Spark environment but auth failed, use public mode
         if (isSparkEnvironment()) {
           toast.info("Using public repository access only", {
-            description: "GitHub authentication in Spark environment couldn't be completed."
+            description: "To access private repositories, you'll need to use a GitHub Personal Access Token. The application will prompt you for one when needed."
           });
         } else {
           // In regular web environment, initiate OAuth flow
@@ -91,11 +102,34 @@ export const GitHubAuth: React.FC = () => {
               <AvatarFallback>{user.login.substring(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
             <span className="hidden sm:inline">{user.login}</span>
-            <Check className="h-3 w-3 text-accent" />
+            <span className="flex items-center">
+              {canAccessPrivate ? (
+                <LockOpen className="h-3 w-3 text-accent ml-1" title="Private repo access enabled" />
+              ) : (
+                <Check className="h-3 w-3 text-accent" />
+              )}
+            </span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="flex justify-between items-center">
+            <span>Repository Access:</span>
+            <span className="flex items-center text-xs">
+              {canAccessPrivate ? (
+                <>
+                  <LockOpen className="h-3 w-3 mr-1 text-accent" />
+                  <span className="text-accent">Public & Private</span>
+                </>
+              ) : (
+                <>
+                  <LockSimple className="h-3 w-3 mr-1" />
+                  <span>Public Only</span>
+                </>
+              )}
+            </span>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <a 
@@ -124,7 +158,7 @@ export const GitHubAuth: React.FC = () => {
         <span>Sign in with GitHub</span>
       </Button>
       <div className="text-xs text-muted-foreground mt-1">
-        Authenticate to increase API limits
+        Authenticate to access private repositories & increase API limits
       </div>
     </div>
   );

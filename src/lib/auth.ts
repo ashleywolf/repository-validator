@@ -224,6 +224,12 @@ export async function fetchUserInfo(accessToken: string): Promise<GitHubUser> {
 export function createOctokit(accessToken: string | null): Octokit | null {
   if (!accessToken) return null;
   
+  // For GitHub PAT tokens (starting with ghp_ or ghs_)
+  if (accessToken.startsWith('ghp_') || accessToken.startsWith('ghs_')) {
+    // Create an Octokit instance with real GitHub token
+    return new Octokit({ auth: accessToken });
+  }
+  
   // For Spark-based tokens, we'll create a special Octokit instance
   if (accessToken.startsWith('spark_github_')) {
     // Create an Octokit instance with request override
@@ -236,20 +242,17 @@ export function createOctokit(accessToken: string | null): Octokit | null {
             delete options.headers.authorization;
           }
           
-          // For certain safe read operations, modify to work with public APIs
-          if (options.method === 'GET' && options.url.includes('/repos/')) {
-            // Ensure we're accessing the public API endpoints
-            try {
-              const response = await request(options);
-              return response;
-            } catch (e) {
-              console.error("Error accessing GitHub API:", e);
-              throw e;
+          try {
+            const response = await request(options);
+            return response;
+          } catch (error: any) {
+            // If we get a 404 or 403, this might be a private repository
+            if (error.status === 404 || error.status === 403) {
+              throw new Error(`Repository access denied. This may be a private repository that requires authentication with a GitHub Personal Access Token.`);
             }
+            console.error("Error accessing GitHub API:", error);
+            throw error;
           }
-          
-          // For other operations, proceed without authentication
-          return request(options);
         }
       }
     });
@@ -272,14 +275,33 @@ export function isSparkEnvironment(): boolean {
 
 /**
  * For a more direct auth approach, provide this method
+ * This will attempt to get a GitHub token via Spark when running in the Spark environment
  */
 export async function getSparkAuthToken(): Promise<string | null> {
   try {
     // Check if we're in the Spark environment
     if (isSparkEnvironment()) {
+      try {
+        // First, attempt to get a GitHub token from the user session
+        // This will handle authentication for private repos when in the Spark environment
+        const prompt = spark.llmPrompt`Please provide a GitHub token for authentication purposes. This is needed to access private repositories and will be used securely within this Spark application.`;
+        const response = await spark.llm(prompt);
+        
+        // Extract potential token from response
+        const tokenMatch = response.match(/\b(gh[ps]_[a-zA-Z0-9_]+)\b/);
+        if (tokenMatch && tokenMatch[1]) {
+          const token = tokenMatch[1];
+          storeAccessToken(token);
+          return token;
+        }
+      } catch (error) {
+        console.warn("Could not get GitHub token from Spark:", error);
+      }
+      
+      // Fallback to using Spark user info
       const user = await spark.user();
       if (user && user.id) {
-        // Create a token format that we can identify later
+        // Create a simulated token format that we can identify later
         const token = `spark_github_${user.id}_${Date.now()}`;
         storeAccessToken(token);
         return token;

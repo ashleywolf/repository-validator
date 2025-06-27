@@ -165,6 +165,8 @@ function AppContent() {
               throw new Error("Repository not found or is private. Please sign in with GitHub to access private repositories.");
             } else if (response.status === 403) {
               throw new Error("API rate limit exceeded. Please sign in with GitHub to increase your rate limit.");
+            } else if (response.status === 401) {
+              throw new Error("Authentication required for this repository. Please sign in with a GitHub Personal Access Token that has access to this repository.");
             } else {
               throw new Error(`GitHub API error: ${response.status}`);
             }
@@ -421,7 +423,21 @@ function AppContent() {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
-          errorMessage = "Authentication failed (401). Your access token may have expired or been revoked. Try signing out and signing in again.";
+          errorMessage = "Authentication failed (401). This is likely a private repository that requires a Personal Access Token with appropriate permissions.";
+          
+          // Show specific prompt for private repos
+          toast.error("Private Repository Access Required", {
+            description: "This appears to be a private repository. To proceed, you'll need to authenticate with a GitHub Personal Access Token that has access to this repository.",
+            action: {
+              label: "Sign In",
+              onClick: () => {
+                if (typeof handleDirectAuth === 'function') {
+                  handleDirectAuth();
+                }
+              },
+            },
+            duration: 8000,
+          });
         } else if (errorMessage.includes("GitHub API error: 403")) {
           errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository. Try signing in with GitHub to increase your rate limit.";
           
@@ -639,8 +655,18 @@ function AppContent() {
                       )}
                       {error.includes("Authentication failed (401)") && (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <strong>Recommendation:</strong> Your current authentication session may have expired.
-                          Try signing out and signing in again with GitHub.
+                          <strong>Recommendation:</strong> This appears to be a private repository.
+                          To access it, you need to sign in with a GitHub Personal Access Token with the "repo" scope.
+                          <div className="mt-1">
+                            <a
+                              href="https://github.com/settings/tokens/new?scopes=repo&description=Repo%20Checker%20App" 
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline"
+                            >
+                              Create a new token
+                            </a> and then sign in with it.
+                          </div>
                         </div>
                       )}
                     </AlertDescription>

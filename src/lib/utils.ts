@@ -405,8 +405,14 @@ export function addAuthHeaders(): Record<string, string> {
   
   // Try to use token from localStorage if available
   const token = localStorage.getItem("github_access_token");
-  if (token && !token.startsWith('spark_github_')) {
-    headers['Authorization'] = `token ${token}`;
+  if (token) {
+    // Only add real GitHub tokens (not simulated Spark tokens)
+    if (token.startsWith('ghp_') || token.startsWith('ghs_')) {
+      headers['Authorization'] = `token ${token}`;
+    } else if (!token.startsWith('spark_github_')) {
+      // For other token formats (like OAuth tokens)
+      headers['Authorization'] = `token ${token}`;
+    }
   }
   
   return headers;
