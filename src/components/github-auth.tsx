@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SignIn, SignOut, User, Check, LockSimple, LockOpen } from "@phosphor-icons/react";
 import { getSparkAuthToken, isSparkEnvironment } from "../lib/auth";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 export const GitHubAuth: React.FC = () => {
   const { authState, login, logout, initWithSparkAuth } = useAuth();
