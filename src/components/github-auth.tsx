@@ -162,7 +162,12 @@ export const GitHubAuth: React.FC = () => {
         <span>Sign in with GitHub</span>
       </Button>
       <div className="text-xs text-muted-foreground mt-1">
-        Authenticate to access private repositories & increase API limits
+        Authenticate to access private repositories & increase API limits.
+        {isSparkEnvironment() && (
+          <div className="mt-1 text-xs text-primary">
+            Using Spark environment - authentication will happen automatically for your repositories.
+          </div>
+        )}
       </div>
     </div>
   );

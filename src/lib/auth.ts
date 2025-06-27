@@ -35,12 +35,12 @@ export async function makeGitHubApiRequestViaLLM(
   headers: Record<string, string> = {}
 ): Promise<any> {
   try {
-    if (!isSparkEnvironment()) {
+    if (!(typeof window !== 'undefined' && typeof window.spark !== 'undefined' && typeof window.spark.llm === 'function')) {
       throw new Error("This function can only be used in the Spark environment");
     }
     
     // Prepare the API request details for the LLM
-    const sparkPrompt = spark.llmPrompt`Please make this GitHub API request and return ONLY the JSON response:
+    const sparkPrompt = window.spark.llmPrompt`Please make this GitHub API request and return ONLY the JSON response:
 Method: ${method}
 URL: ${url}
 Headers: ${JSON.stringify({
@@ -50,7 +50,7 @@ Headers: ${JSON.stringify({
 ${body ? `Body: ${JSON.stringify(body)}` : ''}`;
     
     // Use JSON mode to ensure we get properly formatted JSON back
-    const response = await spark.llm(sparkPrompt, "gpt-4o", true);
+    const response = await window.spark.llm(sparkPrompt, "gpt-4o", true);
     return response;
   } catch (error) {
     console.error("Error making GitHub API request through Spark:", error);
@@ -140,13 +140,15 @@ export async function handleOAuthCallback(code: string, state: string): Promise<
   try {
     // For Spark environment, we'll use Spark's user context instead of OAuth
     try {
-      const user = await spark.user();
-      
-      if (user && user.id) {
-        // Create a simulated token
-        const simulatedToken = `spark_github_${user.id}_${Date.now()}`;
-        storeAccessToken(simulatedToken);
-        return simulatedToken;
+      if (typeof window !== 'undefined' && typeof window.spark !== 'undefined' && typeof window.spark.user === 'function') {
+        const user = await window.spark.user();
+        
+        if (user && user.id) {
+          // Create a simulated token
+          const simulatedToken = `spark_github_${user.id}_${Date.now()}`;
+          storeAccessToken(simulatedToken);
+          return simulatedToken;
+        }
       }
     } catch (error) {
       console.log("No Spark user available, continuing with OAuth flow");
@@ -205,8 +207,8 @@ export async function fetchUserInfo(accessToken: string): Promise<GitHubUser> {
     // First attempt to use Spark's user info if we have a Spark token
     if (accessToken.startsWith('spark_github_')) {
       try {
-        if (isSparkEnvironment()) {
-          const sparkUser = await spark.user();
+        if (typeof window !== 'undefined' && typeof window.spark !== 'undefined' && typeof window.spark.user === 'function') {
+          const sparkUser = await window.spark.user();
           if (sparkUser) {
             return {
               login: sparkUser.login || 'github-user',
@@ -281,7 +283,7 @@ export function createOctokit(accessToken: string | null): Octokit | null {
             // Make the actual GitHub API request through Spark's authenticated context
             try {
               // Make the request directly to GitHub API through Spark's context
-              const sparkPrompt = spark.llmPrompt`Please make this GitHub API request:
+              const sparkPrompt = window.spark.llmPrompt`Please make this GitHub API request:
 Method: ${options.method || 'GET'}
 URL: ${options.url}
 Headers: ${JSON.stringify(options.headers || {})}
@@ -289,7 +291,7 @@ Body: ${options.body ? JSON.stringify(options.body) : 'null'}
 
 Return ONLY the JSON response from the GitHub API.`;
               
-              const response = await spark.llm(sparkPrompt, "gpt-4o", true);
+              const response = await window.spark.llm(sparkPrompt, "gpt-4o", true);
               
               // Parse and return the response as if it came directly from Octokit
               return {
@@ -350,8 +352,8 @@ Return ONLY the JSON response from the GitHub API.`;
  */
 export function isSparkEnvironment(): boolean {
   return typeof window !== 'undefined' && 
-         typeof (window as any).spark !== 'undefined' && 
-         typeof (window as any).spark.user === 'function';
+         typeof window.spark !== 'undefined' && 
+         typeof window.spark.user === 'function';
 }
 
 /**
@@ -361,10 +363,10 @@ export function isSparkEnvironment(): boolean {
 export async function getSparkAuthToken(): Promise<string | null> {
   try {
     // Check if we're in the Spark environment
-    if (isSparkEnvironment()) {
+    if (typeof window !== 'undefined' && typeof window.spark !== 'undefined' && typeof window.spark.user === 'function') {
       try {
         // Get user's GitHub token directly
-        const user = await spark.user();
+        const user = await window.spark.user();
         
         // Create an authenticated token using the user's credentials
         // This can access private repositories the user has access to
@@ -381,7 +383,7 @@ export async function getSparkAuthToken(): Promise<string | null> {
       
       // Fallback to using generic Spark user info for public repos only
       try {
-        const user = await spark.user();
+        const user = await window.spark.user();
         if (user && user.id) {
           // Create a simulated token format that we can identify later
           const token = `spark_github_${user.id}_${Date.now()}`;

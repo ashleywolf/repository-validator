@@ -76,7 +76,7 @@ function AppContent() {
         toast.success("Authenticated with GitHub via Spark");
       } else {
         // If in the Spark environment but auth failed, use public mode
-        if (typeof window !== 'undefined' && window.spark) {
+        if (typeof window !== 'undefined' && typeof window.spark !== 'undefined') {
           toast.info("Using public repository access only");
         } else {
           // In regular web environment, initiate OAuth flow
@@ -667,6 +667,9 @@ function AppContent() {
                             </Button>
                             <span className="mx-1">to access private repositories.</span>
                           </div>
+                          <div className="mt-1">
+                            <p>In the Spark environment, authentication happens automatically for repositories you have access to.</p>
+                          </div>
                         </div>
                       )}
                     </AlertDescription>
@@ -689,6 +692,10 @@ function AppContent() {
                           Authentication error: {authState.error}
                         </div>
                       )}
+                      <div className="mt-2 text-xs border-l-2 border-primary/20 pl-2 py-1">
+                        <strong>Private Repository Access:</strong> When using the Spark environment, 
+                        private repositories can be accessed through the Spark authentication system.
+                      </div>
                     </AlertDescription>
                   </Alert>
                 )}
