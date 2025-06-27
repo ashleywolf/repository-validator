@@ -8,6 +8,8 @@ import {
   parseGitHubUrl,
   commonRequirements
 } from "./lib/utils";
+import { FileTemplate, getTemplatesByType } from "./lib/templates";
+import { TemplateViewer } from "./components/template-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,8 +24,8 @@ import {
   Check, 
   X, 
   Warning, 
-  FolderOpen,
-  File
+  FilePlus,
+  FileText
 } from "@phosphor-icons/react";
 
 function App() {
@@ -33,12 +35,16 @@ function App() {
   const [activePreset, setActivePreset] = useState("basic");
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
   const [requirements, setRequirements] = useState<FileRequirement[]>(commonRequirements.basic);
+  const [selectedTemplate, setSelectedTemplate] = useState<FileTemplate | null>(null);
+  const [showTemplateView, setShowTemplateView] = useState(false);
 
   // Handle URL validation and repo scanning
   const handleValidate = async () => {
     // Reset states
     setError(null);
     setValidationSummary(null);
+    setSelectedTemplate(null);
+    setShowTemplateView(false);
     
     // Validate URL format
     if (!isValidGitHubUrl(url)) {
@@ -140,7 +146,25 @@ function App() {
     setRequirements(commonRequirements[preset]);
     // Reset validation if requirements change
     setValidationSummary(null);
+    setSelectedTemplate(null);
+    setShowTemplateView(false);
   };
+  
+  // Get appropriate template for a file
+  const handleSelectTemplate = (filePath: string) => {
+    const templates = getTemplatesByType(activePreset);
+    if (templates[filePath]) {
+      setSelectedTemplate(templates[filePath]);
+      setShowTemplateView(true);
+    }
+  };
+  
+  // Go back to validation view
+  const handleBackToResults = () => {
+    setSelectedTemplate(null);
+    setShowTemplateView(false);
+  };
+  
   
   return (
     <div className="container mx-auto py-10 px-4">
