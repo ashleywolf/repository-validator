@@ -68,20 +68,29 @@ export const commonRequirements: Record<string, FileRequirement[]> = {
   basic: [
     { path: 'README.md', required: true, description: 'Project documentation' },
     { path: 'LICENSE', required: true, description: 'License information' },
-    { path: '.gitignore', required: true, description: 'Git ignore rules' }
+    { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
+    { path: 'SUPPORT.md', required: true, description: 'Support information' },
+    { path: 'SECURITY.md', required: true, description: 'Security policy' },
+    { path: '.gitignore', required: false, description: 'Git ignore rules' }
   ],
   javascript: [
     { path: 'package.json', required: true, description: 'NPM package configuration' },
     { path: 'README.md', required: true, description: 'Project documentation' },
     { path: 'LICENSE', required: true, description: 'License information' },
-    { path: '.gitignore', required: true, description: 'Git ignore rules' },
+    { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
+    { path: 'SUPPORT.md', required: true, description: 'Support information' },
+    { path: 'SECURITY.md', required: true, description: 'Security policy' },
+    { path: '.gitignore', required: false, description: 'Git ignore rules' },
     { path: '.eslintrc.json', required: false, description: 'ESLint configuration' },
     { path: 'tsconfig.json', required: false, description: 'TypeScript configuration' }
   ],
   python: [
     { path: 'README.md', required: true, description: 'Project documentation' },
     { path: 'LICENSE', required: true, description: 'License information' },
-    { path: '.gitignore', required: true, description: 'Git ignore rules' },
+    { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
+    { path: 'SUPPORT.md', required: true, description: 'Support information' },
+    { path: 'SECURITY.md', required: true, description: 'Security policy' },
+    { path: '.gitignore', required: false, description: 'Git ignore rules' },
     { path: 'requirements.txt', required: true, description: 'Python dependencies' },
     { path: 'setup.py', required: false, description: 'Package installation script' }
   ]

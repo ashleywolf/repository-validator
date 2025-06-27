@@ -1,117 +1,110 @@
-# GitHub Repo Wizard PRD
+# GitHub Repo Wizard - PRD
 
 ## Core Purpose & Success
-- **Mission Statement**: Help developers quickly validate GitHub repositories for required files and structure.
-- **Success Indicators**: Users can successfully validate repos, view missing files, and get actionable feedback on repo compliance.
-- **Experience Qualities**: Efficient, Intuitive, Informative
+- **Mission Statement**: Validate GitHub repositories to ensure they include all required standard files for open source best practices.
+- **Success Indicators**: Users can quickly verify if their repos contain all necessary standard files and understand what's missing.
+- **Experience Qualities**: Efficient, Helpful, Clear
 
 ## Project Classification & Approach
 - **Complexity Level**: Light Application (multiple features with basic state)
-- **Primary User Activity**: Acting - validating repo structure and receiving guidance
+- **Primary User Activity**: Consuming - users primarily consume validation information about their repositories
 
 ## Thought Process for Feature Selection
-- **Core Problem Analysis**: Developers need to ensure their repos contain required files before submission, but manual checking is tedious and error-prone.
-- **User Context**: Users will engage when preparing to submit/share repositories, during code reviews, or when establishing new projects.
-- **Critical Path**: Enter repo URL → Fetch repo contents → Validate against requirements → Display results with actionable insights
+- **Core Problem Analysis**: Open source projects and repositories often miss important files that are considered standard for well-maintained projects.
+- **User Context**: Developers will use this when setting up new repositories or auditing existing ones for compliance with best practices.
+- **Critical Path**: Enter repo URL → Select validation template → Review results → Address missing files
 - **Key Moments**: 
-  1. Validating a URL and seeing real-time feedback
-  2. Viewing a comprehensive analysis of the repo structure
-  3. Receiving specific guidance on missing requirements
+  1. Validation completion showing missing required files
+  2. Clear distinction between required vs. recommended files
 
 ## Essential Features
-1. **GitHub URL Input & Validation**
-   - What: Form input that accepts and validates GitHub repository URLs
-   - Why: Ensures users provide a correct entry point for analysis
-   - Success: Users receive immediate feedback on URL validity
+1. **Repository URL Validation**
+   - Accepts and validates GitHub repository URLs
+   - Provides clear error messages for invalid URLs
+   - Success criteria: Successfully identifies and rejects malformed URLs
 
-2. **Repository File Scanner**
-   - What: Fetches and analyzes repository file structure
-   - Why: Provides the core data needed for validation
-   - Success: Can correctly fetch and parse files from public repositories
+2. **Repository Content Scanning**
+   - Fetches repository file structure from GitHub API
+   - Builds list of existing files for comparison
+   - Success criteria: Accurately retrieves repo file structure
 
-3. **Requirements Definition**
-   - What: Interface to define which files/patterns should be required
-   - Why: Allows customization to different project standards
-   - Success: Users can select from common presets or define custom requirements
+3. **File Requirements Checking**
+   - Compares existing files against required file templates
+   - Categorizes findings as present, missing required, or missing recommended
+   - Success criteria: Correctly identifies presence/absence of all required files
 
-4. **Results Display**
-   - What: Clear visual feedback on compliance status
-   - Why: Helps users quickly identify issues to address
-   - Success: Users can instantly understand which requirements are met/unmet
+4. **Validation Templates**
+   - Offers different validation templates for various project types
+   - Includes general repository requirements like README, LICENSE, etc.
+   - Success criteria: Templates cover common project types and standard requirements
 
 ## Design Direction
 
 ### Visual Tone & Identity
-- **Emotional Response**: Confidence, clarity, reassurance
-- **Design Personality**: Professional, efficient, modern
-- **Visual Metaphors**: Checklist, verification badges, organized files
-- **Simplicity Spectrum**: Minimal interface to focus on the validation results
+- **Emotional Response**: Confidence, clarity, and competence
+- **Design Personality**: Professional with GitHub-inspired aesthetic
+- **Visual Metaphors**: File structure, checks/validation concepts
+- **Simplicity Spectrum**: Minimal interface with clear focus on validation results
 
 ### Color Strategy
-- **Color Scheme Type**: Monochromatic with strategic accent colors
-- **Primary Color**: Deep blue (#0969DA) - represents reliability and professionalism
-- **Secondary Colors**: Lighter blues for supporting elements
-- **Accent Color**: Green for success (#238636), amber for warnings (#F2A60C), red for errors (#E5534B)
-- **Color Psychology**: Blue conveys trust and reliability; strategic accent colors provide clear status indicators
-- **Color Accessibility**: All color combinations exceed WCAG AA contrast requirements
-- **Foreground/Background Pairings**:
-  - Background (#FFFFFF) / Foreground (#0C0E12)
-  - Card (#F6F8FA) / Card-Foreground (#0C0E12)
-  - Primary (#0969DA) / Primary-Foreground (#FFFFFF)
-  - Secondary (#EBF5FF) / Secondary-Foreground (#0969DA)
-  - Accent (#238636) / Accent-Foreground (#FFFFFF)
-  - Muted (#F6F8FA) / Muted-Foreground (#57606A)
+- **Color Scheme Type**: GitHub-inspired with complementary accent colors
+- **Primary Color**: GitHub blue for primary actions and branding
+- **Secondary Colors**: Subtle blue tints for secondary elements
+- **Accent Color**: Success green for validation passes, warning amber for recommendations, error red for failures
+- **Color Psychology**: Blues convey trust and professionalism, green indicates success, amber suggests caution, red signals important issues
+- **Color Accessibility**: All color pairings maintain WCAG AA contrast ratios
+- **Foreground/Background Pairings**: Dark text on light backgrounds for maximum readability
 
 ### Typography System
-- **Font Pairing Strategy**: Single sans-serif font family with varied weights for hierarchy
-- **Typographic Hierarchy**: Clear distinction between headings (600 weight) and body text (400 weight)
-- **Font Personality**: Clean, modern, technical but approachable
-- **Readability Focus**: Generous line height (1.5) and appropriate text sizes (16px base)
-- **Typography Consistency**: Consistent spacing and sizing ratios throughout
-- **Which fonts**: Inter - a clean, highly-readable sans-serif that works well for both UI and longer text
-- **Legibility Check**: Inter is highly legible at all sizes and provides excellent clarity for technical information
+- **Font Pairing Strategy**: Single font family (Inter) with varying weights for different hierarchical levels
+- **Typographic Hierarchy**: Clear distinction between headings, labels, and body text through weight and size
+- **Font Personality**: Clean, professional, highly legible
+- **Readability Focus**: Generous spacing and line heights for comfortable reading
+- **Typography Consistency**: Consistent text sizing and weights throughout the application
+- **Which fonts**: Inter (Google Font)
+- **Legibility Check**: High legibility with clean sans-serif font, appropriately sized
 
 ### Visual Hierarchy & Layout
-- **Attention Direction**: Focus on input area initially, then clear transition to results
-- **White Space Philosophy**: Generous spacing to separate distinct functional areas
-- **Grid System**: Simple single-column layout on mobile, expanding to two columns on larger screens
-- **Responsive Approach**: Stack elements vertically on small screens, side-by-side on larger screens
-- **Content Density**: Moderate - balancing comprehensive information with clarity
+- **Attention Direction**: Primary focus on repository URL input followed by validation results
+- **White Space Philosophy**: Generous spacing between sections to create clear separation
+- **Grid System**: Responsive grid with single column on mobile, dual column results on larger screens
+- **Responsive Approach**: Mobile-first with appropriate stacking and resizing
+- **Content Density**: Balanced - providing comprehensive information without overwhelming the user
 
 ### Animations
-- **Purposeful Meaning**: Subtle animations to indicate scanning progress and results appearance
-- **Hierarchy of Movement**: Primary animation for validation process, secondary for UI feedback
-- **Contextual Appropriateness**: Restrained animations focused on functional feedback rather than decoration
+- **Purposeful Meaning**: Subtle animations for loading states
+- **Hierarchy of Movement**: Loading indicator during API calls
+- **Contextual Appropriateness**: Minimal animations to maintain professional feel
 
 ### UI Elements & Component Selection
-- **Component Usage**: Cards for results, alerts for notifications, progress indicators for scanning
-- **Component Customization**: Rounded corners and subtle shadows for cards and interactive elements
-- **Component States**: Clear hover/focus states for interactive elements with color and subtle scale changes
-- **Icon Selection**: Using repository, file, check/x-mark, and warning icons to represent different statuses
-- **Component Hierarchy**: Primary action (validate button), secondary actions (configuration options)
-- **Spacing System**: Consistent 4-point grid (0.25rem base) for all spacing values
-- **Mobile Adaptation**: Full-width components on mobile, with appropriate touch targets
+- **Component Usage**: Cards for main input and results sections, badges for status indicators
+- **Component Customization**: GitHub-inspired styling with shadcn components
+- **Component States**: Clear visual feedback for input validation and form submission
+- **Icon Selection**: GitHub logo, file/folder icons, and status indicators
+- **Component Hierarchy**: Primary validation form, secondary results display
+- **Spacing System**: Consistent padding using Tailwind's spacing scale
+- **Mobile Adaptation**: Stacked layout with full-width components on smaller screens
 
 ### Visual Consistency Framework
-- **Design System Approach**: Component-based for maximum reusability
-- **Style Guide Elements**: Color palette, typography, spacing, component styles
-- **Visual Rhythm**: Consistent card styling and spacing throughout the interface
-- **Brand Alignment**: Professional appearance aligned with developer tools
+- **Design System Approach**: Component-based design using shadcn UI library
+- **Style Guide Elements**: Colors, typography, spacing, and component styling
+- **Visual Rhythm**: Consistent card patterns and spacing
+- **Brand Alignment**: Subtle GitHub-inspired aesthetic
 
 ### Accessibility & Readability
-- **Contrast Goal**: WCAG AA compliance for all text and UI elements
+- **Contrast Goal**: WCAG AA compliance for all text elements
 
 ## Edge Cases & Problem Scenarios
-- **Potential Obstacles**: Private repositories, rate limiting, large repositories
-- **Edge Case Handling**: Clear error messages for unauthorized access or rate limits
-- **Technical Constraints**: GitHub API limitations, browser security restrictions
+- **Potential Obstacles**: Private repositories, API rate limiting, large repositories
+- **Edge Case Handling**: Clear error messages for API failures
+- **Technical Constraints**: GitHub API limitations
 
 ## Implementation Considerations
-- **Scalability Needs**: Support for different repository hosts in the future
-- **Testing Focus**: Validate correct detection across different repository structures
-- **Critical Questions**: How to handle very large repositories or complex nested structures?
+- **Scalability Needs**: Support for additional validation templates and file requirements
+- **Testing Focus**: Different repository structures and error conditions
+- **Critical Questions**: How to handle nested files and directories for validation
 
 ## Reflection
-- This approach uniquely combines simplicity with actionable insights, focusing on quick, useful feedback.
-- We've assumed users primarily need validation against common standards rather than deep analysis.
-- To make this exceptional, we could add intelligent suggestions for fixing issues and templates for missing files.
+- The approach focuses on simplicity and clarity, making repository validation accessible to developers of all experience levels.
+- We've assumed users want quick validation rather than deep analysis, which shapes our focused UI.
+- The application could be exceptional by providing suggested file content templates for missing files.

@@ -150,7 +150,7 @@ function App() {
           <h1 className="text-3xl font-bold">GitHub Repo Wizard</h1>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
-          Validate your GitHub repository structure to ensure it contains all required files for best practices and compliance.
+          Validate your GitHub repository structure to ensure it contains all required files for open source best practices and compliance.
         </p>
       </header>
       
@@ -210,9 +210,9 @@ function App() {
                 </TabsList>
                 <div className="mt-4">
                   <div className="text-sm text-muted-foreground">
-                    {activePreset === "basic" && "Checks for essential files in any repository"}
-                    {activePreset === "javascript" && "Checks for JS/TS project requirements"}
-                    {activePreset === "python" && "Checks for Python project requirements"}
+                    {activePreset === "basic" && "Checks for essential files in any open source repository"}
+                    {activePreset === "javascript" && "Checks for JS/TS open source project requirements"}
+                    {activePreset === "python" && "Checks for Python open source project requirements"}
                   </div>
                 </div>
               </Tabs>
@@ -341,7 +341,7 @@ function App() {
       )}
       
       <footer className="mt-16 text-center text-sm text-muted-foreground">
-        <p>GitHub Repo Wizard – Check your repositories for required files and best practices</p>
+        <p>GitHub Repo Wizard – Check your repositories for required open source files and best practices</p>
       </footer>
     </div>
   );
