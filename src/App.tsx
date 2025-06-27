@@ -22,7 +22,7 @@ import { GitHubAuth } from "./components/github-auth";
 import { AuthProvider, useAuth } from "./context/auth-context";
 import { OctocatWizard } from "./components/octocat";
 import { CreatePRButton } from "./components/create-pr-button";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +50,7 @@ import {
 } from "@phosphor-icons/react";
 
 function AppContent() {
-  const { authState, octokit } = useAuth();
+  const { authState, octokit, login, initWithSparkAuth } = useAuth();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
