@@ -42,6 +42,7 @@ import {
   StarHalf,
   LinkSimple,
   Folder,
+  FolderOpen,
   LockSimple,
   LockOpen
 } from "@phosphor-icons/react";
@@ -760,11 +761,6 @@ function AppContent() {
                                   setShowTemplateView(true);
                                 }}
                               />
-                            </div>
-                          )}
-                                <FilePlus className="mr-1 h-3 w-3" />
-                                Create from template
-                              </Button>
                             </div>
                           )}
                         </div>
