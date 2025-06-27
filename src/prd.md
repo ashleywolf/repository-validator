@@ -1,128 +1,123 @@
-# GitHub Repo Wizard PRD
+# Mission RepOSSible - GitHub Open Source Release Checklist
 
 ## Core Purpose & Success
-- **Mission Statement**: Validate GitHub repository structures against compliance standards to ensure open source readiness.
-- **Success Indicators**: Users can successfully validate repositories and identify missing required files, with actionable information on what needs to be added.
-- **Experience Qualities**: Professional, Informative, Efficient
+- **Mission Statement**: Validate GitHub repositories against compliance standards to ensure they're ready for open source release.
+- **Success Indicators**: Users can successfully validate repositories, identify missing required files, and take action to improve compliance.
+- **Experience Qualities**: Professional, Actionable, Engaging
 
 ## Project Classification & Approach
 - **Complexity Level**: Light Application (multiple features with basic state)
-- **Primary User Activity**: Consuming (viewing validation results and recommendations)
+- **Primary User Activity**: Consuming (viewing validation results) and Acting (adding missing files)
 
 ## Thought Process for Feature Selection
-- **Core Problem Analysis**: Open source repositories often lack critical files needed for compliance, documentation, and community standards.
-- **User Context**: Developers working on open source projects need to ensure their repos follow best practices before public release.
-- **Critical Path**: Enter repo URL → View validation results → Add missing files
-- **Key Moments**: Validation scan completion, viewing comprehensive compliance results, rating of repository description
+- **Core Problem Analysis**: Open source repositories need proper governance files to be compliant and community-friendly.
+- **User Context**: Developers preparing to open source a project or improve an existing one need to verify all required files are in place.
+- **Critical Path**: Enter repo URL → Authenticate if needed → View validation results → Add missing files
+- **Key Moments**: Scanning repository for files, viewing compliance summary, adding required files via templates
 
 ## Essential Features
-1. **GitHub Repository URL Input & Validation**
-   - What it does: Accepts and validates GitHub repository URLs
-   - Why it matters: Ensures users provide valid inputs before running validation
-   - Success criteria: Prevents invalid URL submissions with helpful error messages
+1. **GitHub Repository Validation**
+   - What it does: Validates GitHub repository URLs and scans for required files
+   - Why it matters: Quick assessment of repository compliance status
+   - Success criteria: Accurate detection of missing files with clear reporting
 
-2. **GitHub OAuth Authentication**
-   - What it does: Allows users to authenticate with their GitHub account
-   - Why it matters: Enables access to private repositories and increases API rate limits
-   - Success criteria: Successful authentication with clear user feedback and token management
+2. **GitHub Authentication**
+   - What it does: Enables access to private repositories and higher API limits
+   - Why it matters: Allows validating private repositories before making them public
+   - Success criteria: Seamless authentication with clear feedback
 
-3. **Comprehensive Repository Structure Validation**
-   - What it does: Validates repository against consolidated compliance requirements
-   - Why it matters: Identifies missing required and recommended files
-   - Success criteria: Accurately detects files in repo and organization .github folder
+3. **File Compliance Checking**
+   - What it does: Checks for required open source files (README, LICENSE, etc.)
+   - Why it matters: Ensures repositories follow open source best practices
+   - Success criteria: Comprehensive validation with clear success/failure indicators
 
-4. **Repository Description Rating**
-   - What it does: Analyzes and rates the quality of the repository description
-   - Why it matters: Good descriptions are essential for discoverability and user understanding
-   - Success criteria: Provides meaningful ratings (great, good, poor, missing) with feedback
+4. **Repository Description Analysis**
+   - What it does: Evaluates the quality of repository descriptions
+   - Why it matters: Good descriptions improve project discoverability and adoption
+   - Success criteria: Accurate ratings with actionable improvement feedback
 
-5. **Validation Results Display**
-   - What it does: Shows validation results, highlighting missing required and recommended files
-   - Why it matters: Clearly indicates compliance status and improvement opportunities
-   - Success criteria: Results are categorized by severity with direct links to existing files
+5. **License Analysis**
+   - What it does: Verifies proper licensing information
+   - Why it matters: Ensures legal compliance for open source projects
+   - Success criteria: Correctly identifies copyright holders and license types
 
-6. **License Validation**
-   - What it does: Extracts and displays copyright holder and license type information
-   - Why it matters: Ensures proper licensing and attribution
-   - Success criteria: Accurately extracts and displays copyright holder and license type
+6. **Dependency License Analysis**
+   - What it does: Analyzes project dependencies for license compatibility
+   - Why it matters: Prevents unexpected licensing issues from dependencies
+   - Success criteria: Highlights potential license conflicts requiring review
 
-7. **Dependency License Analysis**
-   - What it does: Analyzes dependencies for copyleft licenses that require review
-   - Why it matters: Helps identify potentially problematic license combinations and provides dependency metrics
-   - Success criteria: Warns users of copyleft licenses that require legal review
-
-8. **Template Creation**
-   - What it does: Provides templates for missing required files from GitHub OSPO repository
-   - Why it matters: Makes it easy to add missing files with proper content
-   - Success criteria: Templates are accessible and can be used to create PRs
+7. **Template-Based File Creation**
+   - What it does: Provides templates for required files
+   - Why it matters: Simplifies adding missing files with proper content
+   - Success criteria: Easy to use templates that can be directly added to repositories
 
 ## Design Direction
 
 ### Visual Tone & Identity
-- **Emotional Response**: Confidence, clarity, professionalism
-- **Design Personality**: Professional with a clean, organized feel
-- **Visual Metaphors**: Code structure, validation checklists
-- **Simplicity Spectrum**: Minimal interface focusing on results and actionable information
+- **Emotional Response**: Confidence, excitement, accomplishment
+- **Design Personality**: Spy/Mission theme with technical precision
+- **Visual Metaphors**: Mission briefcase, code verification, security clearance
+- **Simplicity Spectrum**: Focused interface with mission-critical information
 
 ### Color Strategy
-- **Color Scheme Type**: Monochromatic with strategic accent colors
-- **Primary Color**: GitHub blue (oklch(0.55 0.17 264)) for brand alignment and trust
-- **Secondary Colors**: Light blue tints for supporting UI elements
-- **Accent Color**: Success green (oklch(0.67 0.2 142)) for positive validation results
-- **Color Psychology**: Blue conveys trust and reliability, green indicates success/completion
-- **Color Accessibility**: All color combinations maintain WCAG AA contrast ratios
-- **Foreground/Background Pairings**: Dark text (oklch(0.2 0 0)) on light backgrounds for readability
+- **Color Scheme Type**: Dark interface with purple accents for a "mission control" feel
+- **Primary Color**: Rich purple (oklch(0.65 0.2 264)) representing the mission theme
+- **Secondary Colors**: Dark backgrounds for focus and readability
+- **Accent Color**: Bright green for success indicators
+- **Color Psychology**: Dark theme creates focus, purple conveys creativity and quality
+- **Color Accessibility**: High contrast between text and backgrounds for readability
+- **Foreground/Background Pairings**: Light text on dark backgrounds throughout
 
 ### Typography System
-- **Font Pairing Strategy**: Single font family (Inter) with varied weights for hierarchy
-- **Typographic Hierarchy**: Clear distinction between headings, body text, and metadata
-- **Font Personality**: Professional, clean, and highly legible
-- **Readability Focus**: Generous spacing, line heights, and careful sizing
-- **Typography Consistency**: Consistent font across the application with standardized size increments
-- **Which fonts**: Inter (Google font)
-- **Legibility Check**: Inter is highly legible at all sizes used in the application
+- **Font Pairing Strategy**: JetBrains Mono for headings (technical, precise) and Inter for body text (clean, readable)
+- **Typographic Hierarchy**: Clear distinction between headings, body text, and UI elements
+- **Font Personality**: Technical, modern, clean
+- **Readability Focus**: High contrast, appropriate sizes, and careful spacing
+- **Typography Consistency**: Consistent use of weights and sizes across the application
+- **Which fonts**: JetBrains Mono and Inter (Google fonts)
+- **Legibility Check**: Both fonts highly legible in dark mode with light text
 
 ### Visual Hierarchy & Layout
-- **Attention Direction**: Card-based layout focuses attention on validation results
-- **White Space Philosophy**: Generous spacing to avoid overwhelming users with information
-- **Grid System**: Two-column layout for larger screens, single column for mobile
-- **Responsive Approach**: Flexible layout adapts to different screen sizes
-- **Content Density**: Moderate density with scrollable areas for longer content
+- **Attention Direction**: Mission-critical information highlighted with color and position
+- **White Space Philosophy**: Focused spacing to create clear sections without overwhelming
+- **Grid System**: Card-based layout for distinct information grouping
+- **Responsive Approach**: Maintains usability across device sizes
+- **Content Density**: Moderate density with scrollable areas for detailed information
 
 ### Animations
-- **Purposeful Meaning**: Simple loading animation to indicate scanning in progress
-- **Hierarchy of Movement**: Minimal animations focused on state changes
-- **Contextual Appropriateness**: Subtle animations that don't distract from information
+- **Purposeful Meaning**: Subtle animations that reinforce the mission theme
+- **Hierarchy of Movement**: Movement focused on state changes and important interactions
+- **Contextual Appropriateness**: Animations that enhance rather than distract
 
 ### UI Elements & Component Selection
-- **Component Usage**: Cards for content grouping, badges for status indicators
-- **Component Customization**: Custom status badges with appropriate colors for different validation states
-- **Component States**: Clear hover, active, and disabled states for interactive elements
-- **Icon Selection**: GitHub and file-related icons for visual context
-- **Component Hierarchy**: Primary actions (Validate button) stand out visually
-- **Spacing System**: Consistent spacing using Tailwind's spacing scale
+- **Component Usage**: Mission-themed cards, badges, and buttons
+- **Component Customization**: Custom spy/mission themed decorative elements
+- **Component States**: Clear visual feedback for all interactive states
+- **Icon Selection**: Technical and mission-related icons
+- **Component Hierarchy**: Primary actions clearly distinguished
+- **Spacing System**: Consistent spacing throughout
 - **Mobile Adaptation**: Stacked layout on smaller screens
 
 ### Visual Consistency Framework
-- **Design System Approach**: Component-based design with reusable elements
+- **Design System Approach**: Component-based with consistent mission theme
 - **Style Guide Elements**: Consistent colors, typography, and component styling
-- **Visual Rhythm**: Consistent card layouts, spacing, and typography
-- **Brand Alignment**: GitHub-inspired color scheme and visual style
+- **Visual Rhythm**: Repeated patterns and consistent layout structure
+- **Brand Alignment**: GitHub-inspired with mission theme overlay
 
 ### Accessibility & Readability
 - **Contrast Goal**: WCAG AA compliance for all text and UI elements
 
 ## Edge Cases & Problem Scenarios
 - **Potential Obstacles**: API rate limiting, private repositories, large repositories
-- **Edge Case Handling**: Clear error messages for API limitations and private repos
-- **Technical Constraints**: GitHub API limitations and response formatting
+- **Edge Case Handling**: Clear error messages with alternative authentication options
+- **Technical Constraints**: GitHub API limitations and dependency analysis complexity
 
 ## Implementation Considerations
-- **Scalability Needs**: Potential to add more detailed compliance checks and customizable requirements
-- **Testing Focus**: API response handling, error states, and template accuracy
-- **Critical Questions**: How to handle more complex license and dependency analysis?
+- **Scalability Needs**: Potential to add more compliance checks and customizable requirements
+- **Testing Focus**: Authentication flow, error handling, and template accuracy
+- **Critical Questions**: How to balance comprehensive checks with performance?
 
 ## Reflection
-- This approach uniquely bridges the gap between technical requirements and user-friendly validation
-- The consolidated compliance view makes it easy to see all requirements at once without switching contexts
-- The description rating and direct file links provide additional value to users beyond basic compliance checks
+- The mission theme creates an engaging experience for what could otherwise be a dry compliance task
+- The direct file links and template creation features provide immediate value
+- The integrated dependency and license analysis goes beyond simple file checking

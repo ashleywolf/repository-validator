@@ -447,23 +447,25 @@ function AppContent() {
     <div className="container mx-auto py-10 px-4">
       <header className="text-center mb-10">
         <div className="flex flex-col items-center justify-center mb-4">
-          <OctocatWizard size={120} className="mb-4" />
-          <h1 className="text-3xl font-bold">GitHub Repo Wizard</h1>
+          <OctocatWizard size={140} className="mb-4" />
+          <h1 className="text-3xl font-bold mission-text py-2">Mission RepOSSible</h1>
+          <h2 className="text-xl text-muted-foreground">GitHub Open Source Release Checklist</h2>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
-          Validate your GitHub repository structure to ensure it contains all required files for open source best practices and compliance.
+          Your mission, should you choose to accept it: validate your GitHub repository structure to ensure all
+          required files for open source compliance are in place.
         </p>
       </header>
       
       {!showTemplateView ? (
         <>
-          <Card className="mb-8">
+          <Card className="mb-8 mission-card spy-glow">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle>Repository Validation</CardTitle>
                   <CardDescription>
-                    Enter a GitHub repository URL to check for required files
+                    Enter a GitHub repository URL to begin your mission
                   </CardDescription>
                 </div>
                 <GitHubAuth />
@@ -478,13 +480,13 @@ function AppContent() {
                       placeholder="https://github.com/username/repository"
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
-                      className="w-full"
+                      className="w-full bg-secondary/50 border-primary/30"
                     />
                   </div>
                   <Button 
                     onClick={handleValidate} 
                     disabled={loading || !url.trim()}
-                    className="sm:w-auto w-full"
+                    className="sm:w-auto w-full mission-badge"
                   >
                     {loading ? (
                       <span className="flex items-center">
@@ -503,7 +505,7 @@ function AppContent() {
                 {error && (
                   <Alert variant="destructive">
                     <X className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
+                    <AlertTitle>Mission Critical Error</AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
@@ -511,9 +513,9 @@ function AppContent() {
                 {!authState.isAuthenticated && (
                   <Alert>
                     <LockOpen className="h-4 w-4" />
-                    <AlertTitle>Sign in to access more features</AlertTitle>
+                    <AlertTitle>Security Clearance Required</AlertTitle>
                     <AlertDescription>
-                      Sign in with GitHub to validate private repositories and increase API rate limits.
+                      Sign in with GitHub to access private repositories and increase mission capabilities.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -524,19 +526,19 @@ function AppContent() {
           {validationSummary && (
             <>
               {/* Repository Status Card */}
-              <Card className="mb-6">
+              <Card className="mb-6 mission-card spy-glow">
                 <CardHeader>
                   <CardTitle className="flex justify-between">
-                    <span>Repository Status</span>
+                    <span>Mission Intelligence</span>
                     {isPrivateRepo ? (
                       <Badge variant="outline" className="bg-secondary/50">
                         <LockSimple className="mr-1 h-3 w-3" />
-                        Private
+                        Classified
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="bg-secondary/50">
                         <Folder className="mr-1 h-3 w-3" />
-                        Public
+                        Unclassified
                       </Badge>
                     )}
                   </CardTitle>
@@ -584,10 +586,10 @@ function AppContent() {
               </Card>
               
               {/* File Validation Results Card */}
-              <Card>
+              <Card className="mission-card spy-glow">
                 <CardHeader>
                   <CardTitle className="flex justify-between">
-                    <span>Compliance Results</span>
+                    <span>Mission Report</span>
                     <div className="flex gap-2">
                       {validationSummary.missingRequired > 0 ? (
                         <Badge variant="destructive">
@@ -606,7 +608,7 @@ function AppContent() {
                     </div>
                   </CardTitle>
                   <CardDescription>
-                    Check if all required files are present in {validationSummary.repoName}
+                    Mission status for {validationSummary.repoName}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -804,7 +806,18 @@ function AppContent() {
       )}
       
       <footer className="mt-16 text-center text-sm text-muted-foreground">
-        <p>GitHub Repo Wizard – Check your repositories for required open source files and best practices</p>
+        <p>Mission RepOSSible – This message will self-destruct after your repository is compliant</p>
+        <div className="flex justify-center mt-2">
+          <a 
+            href="https://github.com/github/github-ospo/tree/main/release%20template" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="text-primary text-xs hover:underline flex items-center opacity-70 hover:opacity-100 transition-opacity"
+          >
+            <GithubLogo className="mr-1" size={12} />
+            Open Source Templates
+          </a>
+        </div>
       </footer>
     </div>
   );

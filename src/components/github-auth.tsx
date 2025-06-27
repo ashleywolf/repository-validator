@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useAuth } from "../context/auth-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,11 +10,37 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SignIn, SignOut, User } from "@phosphor-icons/react";
+import { SignIn, SignOut, User, Check } from "@phosphor-icons/react";
+import { getSparkAuthToken } from "../lib/auth";
+import { toast } from "sonner";
 
 export const GitHubAuth: React.FC = () => {
-  const { authState, login, logout } = useAuth();
+  const { authState, login, logout, initWithSparkAuth } = useAuth();
   const { isAuthenticated, user, loading } = authState;
+
+  // Try to authenticate with Spark user on mount
+  useEffect(() => {
+    if (!isAuthenticated && !loading) {
+      initWithSparkAuth();
+    }
+  }, [isAuthenticated, loading, initWithSparkAuth]);
+  
+  const handleDirectAuth = async () => {
+    try {
+      const success = await initWithSparkAuth();
+      if (success) {
+        toast.success("Authenticated with GitHub via Spark");
+      } else {
+        // If Spark auth fails, fall back to OAuth
+        login();
+      }
+    } catch (error) {
+      console.error("Auth error:", error);
+      toast.error("Authentication failed. Trying GitHub OAuth...");
+      // Fall back to regular OAuth
+      login();
+    }
+  };
 
   if (loading) {
     return (
@@ -34,6 +60,7 @@ export const GitHubAuth: React.FC = () => {
               <AvatarFallback>{user.login.substring(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
             <span className="hidden sm:inline">{user.login}</span>
+            <Check className="h-3 w-3 text-accent" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
@@ -60,7 +87,7 @@ export const GitHubAuth: React.FC = () => {
   }
 
   return (
-    <Button onClick={login} variant="outline" className="flex items-center gap-2">
+    <Button onClick={handleDirectAuth} variant="outline" className="flex items-center gap-2">
       <SignIn className="h-4 w-4" />
       <span>Sign in with GitHub</span>
     </Button>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { 
   AuthState, 
   fetchUserInfo, 
@@ -6,15 +6,18 @@ import {
   clearAccessToken, 
   handleOAuthCallback, 
   getGitHubOAuthUrl,
-  createOctokit
+  createOctokit,
+  getSparkAuthToken
 } from "../lib/auth";
 import { Octokit } from "@octokit/core";
+import { toast } from "sonner";
 
 interface AuthContextType {
   authState: AuthState;
   login: () => void;
   logout: () => void;
   octokit: Octokit | null;
+  initWithSparkAuth: () => Promise<boolean>;
 }
 
 // Create the auth context with default values
@@ -28,7 +31,8 @@ const AuthContext = createContext<AuthContextType>({
   },
   login: () => {},
   logout: () => {},
-  octokit: null
+  octokit: null,
+  initWithSparkAuth: async () => false
 });
 
 // Custom hook to use the auth context
@@ -43,6 +47,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     error: null
   });
   const [octokit, setOctokit] = useState<Octokit | null>(null);
+
+  // Try to authenticate with Spark
+  const initWithSparkAuth = useCallback(async (): Promise<boolean> => {
+    try {
+      setAuthState(prev => ({
+        ...prev,
+        loading: true,
+        error: null
+      }));
+
+      const token = await getSparkAuthToken();
+      
+      if (token) {
+        try {
+          const user = await fetchUserInfo(token);
+          setAuthState({
+            isAuthenticated: true,
+            accessToken: token,
+            user,
+            loading: false,
+            error: null
+          });
+          
+          const oktokitInstance = createOctokit(token);
+          setOctokit(oktokitInstance);
+          return true;
+        } catch (error) {
+          console.error("Error initializing Spark auth:", error);
+          setAuthState(prev => ({
+            ...prev,
+            loading: false,
+            error: "Could not authenticate with Spark"
+          }));
+          return false;
+        }
+      }
+      
+      setAuthState(prev => ({
+        ...prev,
+        loading: false
+      }));
+      return false;
+    } catch (error) {
+      console.error("Error in Spark auth:", error);
+      setAuthState(prev => ({
+        ...prev,
+        loading: false,
+        error: "Error initializing Spark authentication"
+      }));
+      return false;
+    }
+  }, []);
 
   // Initialize auth state from local storage on component mount
   useEffect(() => {
@@ -119,9 +175,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             error: null
           });
           
+          toast.success("Successfully signed in with GitHub");
+          
           // Clean up the URL
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error) {
+          toast.error("Authentication failed");
           setAuthState(prev => ({
             ...prev,
             loading: false,
@@ -150,10 +209,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       error: null
     });
     setOctokit(null);
+    toast.info("Signed out");
   };
   
   return (
-    <AuthContext.Provider value={{ authState, login, logout, octokit }}>
+    <AuthContext.Provider value={{ authState, login, logout, octokit, initWithSparkAuth }}>
       {children}
     </AuthContext.Provider>
   );

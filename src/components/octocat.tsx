@@ -58,54 +58,72 @@ export const Octocat: React.FC<{ size?: number; className?: string }> = ({
   );
 };
 
-// A cute octocat with a wizard hat for the app
-export const OctocatWizard: React.FC<{ size?: number; className?: string }> = ({ 
+// A custom themed octocat with a spy/mission theme for Mission RepOSSible
+export const OctocatSpy: React.FC<{ size?: number; className?: string }> = ({ 
   size = 120, 
   className = "" 
 }) => {
   return (
-    <div className={`octocat-wizard-container relative ${className}`} style={{ width: size, height: size }}>
-      {/* Wizard Hat */}
-      <div className="absolute z-10" style={{ top: -size/3, left: size/4 }}>
+    <div className={`octocat-spy-container relative ${className}`} style={{ width: size, height: size }}>
+      {/* Spy Hat */}
+      <div className="absolute z-10" style={{ top: -size/3.5, left: size/4 }}>
         <svg 
           width={size/2} 
-          height={size/2} 
-          viewBox="0 0 24 24" 
+          height={size/3} 
+          viewBox="0 0 24 12" 
           fill="none" 
           xmlns="http://www.w3.org/2000/svg"
         >
           <path 
-            d="M12 2L3 11H21L12 2Z" 
-            fill="#6E56CF" 
+            d="M2 12H22C23.1 12 24 11.1 24 10V2C24 0.9 23.1 0 22 0H2C0.9 0 0 0.9 0 2V10C0 11.1 0.9 12 2 12Z" 
+            fill="#333333" 
             className="animate-sparkle"
           />
           <path 
-            d="M5 11H19V14C19 17.866 15.866 21 12 21C8.13401 21 5 17.866 5 14V11Z" 
-            fill="#6E56CF"
+            d="M3 12H21L22 8H2L3 12Z" 
+            fill="#222222"
           />
-          <path 
-            d="M10 14H14" 
-            stroke="gold" 
-            strokeWidth="1.5" 
-            strokeLinecap="round"
-          />
-          <path 
-            d="M8 17H16" 
-            stroke="gold" 
-            strokeWidth="1.5" 
-            strokeLinecap="round"
-          />
-          <circle cx="10" cy="8" r="1" fill="gold" className="animate-twinkle" />
-          <circle cx="14" cy="6" r="1" fill="gold" className="animate-twinkle-delay" />
-          <circle cx="8" cy="6" r="1" fill="gold" className="animate-twinkle" />
         </svg>
       </div>
       
-      {/* Octocat */}
+      {/* Spy Glasses */}
+      <div className="absolute z-20" style={{ top: size/5, left: size/6 }}>
+        <svg 
+          width={size*2/3} 
+          height={size/6} 
+          viewBox="0 0 32 8" 
+          fill="none" 
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <rect x="2" y="2" width="12" height="4" rx="2" fill="black" stroke="#555555" strokeWidth="1" />
+          <rect x="18" y="2" width="12" height="4" rx="2" fill="black" stroke="#555555" strokeWidth="1" />
+          <path d="M14 4H18" stroke="#555555" strokeWidth="1" />
+        </svg>
+      </div>
+      
+      {/* Mission Briefcase */}
+      <div className="absolute" style={{ bottom: -size/10, left: size/4 }}>
+        <svg 
+          width={size/2} 
+          height={size/4} 
+          viewBox="0 0 24 12" 
+          fill="none" 
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <rect x="2" y="1" width="20" height="10" rx="1" fill="#553C9A" />
+          <rect x="10" y="0" width="4" height="2" fill="#553C9A" />
+          <rect x="11" y="5" width="2" height="2" rx="1" fill="gold" className="animate-twinkle" />
+        </svg>
+      </div>
+      
+      {/* Base Octocat */}
       <Octocat size={size} />
     </div>
   );
 };
+
+// Re-export the existing OctocatWizard with a new name for backward compatibility
+export const OctocatWizard = OctocatSpy;
 
 // Add custom animation classes to index.css
 export const addOctocatStyles = `
