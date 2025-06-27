@@ -22,6 +22,8 @@ import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
 import { GitHubAuth } from "./components/github-auth";
 import { AuthProvider, useAuth } from "./context/auth-context";
+import { ThemeProvider } from "./context/theme-context";
+import { ThemeToggle } from "./components/theme-toggle";
 import { OctocatWizard } from "./components/octocat";
 import { CreatePRButton } from "./components/create-pr-button";
 import { Toaster, toast } from "sonner";
@@ -552,6 +554,9 @@ function AppContent() {
     <div className="container mx-auto py-10 px-4">
       <header className="text-center mb-10">
         <div className="flex flex-col items-center justify-center mb-4">
+          <div className="absolute right-4 top-4">
+            <ThemeToggle />
+          </div>
           <OctocatWizard size={140} className="mb-4" />
           <h1 className="text-3xl font-bold mission-text py-2">Mission RepOSSible</h1>
           <h2 className="text-xl text-muted-foreground">GitHub Open Source Release Checklist</h2>
@@ -1075,10 +1080,12 @@ git push -f origin main
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-      <Toaster position="top-right" />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+        <Toaster position="top-right" />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

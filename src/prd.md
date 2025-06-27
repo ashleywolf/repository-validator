@@ -61,6 +61,11 @@
    - Why it matters: Ensures sensitive information in commit history is removed
    - Success criteria: Clear instructions for safely squashing repository history
 
+10. **Theme Toggle**
+    - What it does: Allows users to switch between dark and light themes
+    - Why it matters: Improves accessibility and user comfort in different environments
+    - Success criteria: Seamless theme switching that persists across sessions
+
 ## Design Direction
 
 ### Visual Tone & Identity
@@ -70,13 +75,13 @@
 - **Simplicity Spectrum**: Focused interface with mission-critical information
 
 ### Color Strategy
-- **Color Scheme Type**: Dark interface with purple accents for a "mission control" feel
+- **Color Scheme Type**: Dual theme (dark/light) with purple accents as brand color
 - **Primary Color**: Rich purple (oklch(0.65 0.2 264)) representing the mission theme
-- **Secondary Colors**: Dark backgrounds for focus and readability
+- **Secondary Colors**: Dark/light backgrounds based on theme selection
 - **Accent Color**: Bright green for success indicators
-- **Color Psychology**: Dark theme creates focus, purple conveys creativity and quality
-- **Color Accessibility**: High contrast between text and backgrounds for readability
-- **Foreground/Background Pairings**: Light text on dark backgrounds throughout
+- **Color Psychology**: Dark theme creates focus, light theme improves readability in bright environments
+- **Color Accessibility**: High contrast between text and backgrounds for readability in both themes
+- **Foreground/Background Pairings**: Light text on dark backgrounds (dark theme), dark text on light backgrounds (light theme)
 
 ### Typography System
 - **Font Pairing Strategy**: JetBrains Mono for headings (technical, precise) and Inter for body text (clean, readable)

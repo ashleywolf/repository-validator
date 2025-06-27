@@ -15,6 +15,12 @@
 }
 
 :root {
+  /* Border radius */
+  --radius: 0.5rem;
+}
+
+/* Dark theme (default) */
+.dark {
   /* Base colors - mission-inspired theme */
   --background: oklch(0.1 0.02 240); /* Dark background */
   --foreground: oklch(0.9 0.02 240); /* Light text */
@@ -45,9 +51,40 @@
   --border: oklch(0.3 0.03 240);
   --input: oklch(0.3 0.03 240);
   --ring: oklch(0.65 0.2 264);
+}
+
+/* Light theme */
+.light {
+  /* Base colors - light mission theme */
+  --background: oklch(0.98 0 0); /* Light background */
+  --foreground: oklch(0.15 0.02 240); /* Dark text */
   
-  /* Border radius */
-  --radius: 0.5rem;
+  --card: oklch(0.95 0.02 240);
+  --card-foreground: oklch(0.2 0.02 240);
+  
+  --popover: oklch(0.98 0 0);
+  --popover-foreground: oklch(0.15 0.02 240);
+  
+  /* Action colors */
+  --primary: oklch(0.65 0.2 264); /* Keep the same purple for brand consistency */
+  --primary-foreground: oklch(0.98 0 0);
+  
+  --secondary: oklch(0.93 0.05 264);
+  --secondary-foreground: oklch(0.2 0.02 240);
+  
+  --accent: oklch(0.6 0.2 142); /* Slightly darker green for better contrast */
+  --accent-foreground: oklch(0.98 0 0);
+  
+  --destructive: oklch(0.65 0.18 25); /* Same error red */
+  --destructive-foreground: oklch(0.98 0 0);
+  
+  /* Supporting UI colors */
+  --muted: oklch(0.9 0.02 240);
+  --muted-foreground: oklch(0.5 0.02 240);
+  
+  --border: oklch(0.75 0.03 240);
+  --input: oklch(0.75 0.03 240);
+  --ring: oklch(0.65 0.2 264);
 }
 
 @theme {
@@ -85,9 +122,24 @@
   box-shadow: 0 0 15px rgba(109, 40, 217, 0.5);
 }
 
+.dark .spy-glow {
+  box-shadow: 0 0 15px rgba(109, 40, 217, 0.5);
+}
+
+.light .spy-glow {
+  box-shadow: 0 0 10px rgba(109, 40, 217, 0.3);
+}
+
 .mission-card {
   border: 1px solid var(--border);
+}
+
+.dark .mission-card {
   background: linear-gradient(135deg, var(--card) 0%, oklch(0.2 0.03 264) 100%);
+}
+
+.light .mission-card {
+  background: linear-gradient(135deg, var(--card) 0%, oklch(0.9 0.03 264) 100%);
 }
 
 .mission-badge {
