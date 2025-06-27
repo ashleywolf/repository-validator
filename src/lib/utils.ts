@@ -19,6 +19,15 @@ export type RepoFile = {
 export type LicenseCheck = {
   isValid: boolean;
   message: string;
+  licenseName?: string;
+  copyrightHolder?: string;
+}
+
+// Repo description rating
+export type DescriptionRating = {
+  text: string;
+  rating: 'great' | 'good' | 'poor' | 'missing';
+  feedback?: string;
 }
 
 // Dependency data
@@ -32,6 +41,7 @@ export type DependencyAnalysis = {
   devDependenciesCount?: number; // Count of all dev dependencies from package.json
   mitCount?: number; // Count of MIT licensed dependencies from SBOM
   sbomDependenciesCount?: number; // Total count of dependencies from SBOM
+  hasCopyleft?: boolean; // Whether any copyleft licenses are present
 }
 
 export type ValidationResult = {
@@ -42,6 +52,8 @@ export type ValidationResult = {
   prUrl?: string;
   licenseCheck?: LicenseCheck;
   dependencyAnalysis?: DependencyAnalysis;
+  descriptionRating?: DescriptionRating;
+  fileUrl?: string; // URL to view the file directly
 }
 
 export type FileRequirement = {
@@ -181,15 +193,35 @@ export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
     const githubSentenceRegex = /[^.!?]*(?:GitHub|GitHub, Inc|GitHub Inc)[^.!?]*[.!?]/i;
     const githubMatch = licenseText.match(githubSentenceRegex);
     
+    // Try to extract copyright holder
+    const copyrightRegex = /Copyright(?:\s+\(c\))?\s+(?:\d{4}(?:-\d{4})?)\s+([^\n.]+)/i;
+    const copyrightMatch = licenseText.match(copyrightRegex);
+    
+    // Try to identify license type
+    let licenseName = "Unknown";
+    if (licenseText.includes("MIT License")) licenseName = "MIT";
+    else if (licenseText.includes("Apache License")) licenseName = "Apache";
+    else if (licenseText.includes("BSD")) licenseName = "BSD";
+    else if (licenseText.includes("GNU General Public License")) {
+      if (licenseText.includes("version 3")) licenseName = "GPL-3.0";
+      else if (licenseText.includes("version 2")) licenseName = "GPL-2.0";
+      else licenseName = "GPL";
+    }
+    else if (licenseText.includes("Mozilla Public License")) licenseName = "MPL";
+    
     if (githubMatch) {
       return {
         isValid: true,
-        message: githubMatch[0].trim()
+        message: githubMatch[0].trim(),
+        licenseName,
+        copyrightHolder: copyrightMatch ? copyrightMatch[1].trim() : undefined
       };
     } else {
       return {
         isValid: false,
-        message: "License does not contain GitHub copyright notice"
+        message: "License does not contain GitHub copyright notice",
+        licenseName,
+        copyrightHolder: copyrightMatch ? copyrightMatch[1].trim() : undefined
       };
     }
   } catch (error) {
@@ -201,7 +233,7 @@ export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
   }
 }
 
-// Analyze package-lock.json for GPL/AGPL dependencies and total count
+// Analyze dependencies to check for copyleft licenses
 export async function analyzeDependencies(fileUrl: string): Promise<DependencyAnalysis> {
   try {
     const response = await fetch(fileUrl);
@@ -237,12 +269,16 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
       }
     });
     
+    // Determine if there are any copyleft licenses
+    const hasCopyleft = gplDependencies.length > 0 || agplDependencies.length > 0;
+    
     return {
       total: dependencyCount,
       gplCount: gplDependencies.length,
       agplCount: agplDependencies.length,
       gplDependencies,
-      agplDependencies
+      agplDependencies,
+      hasCopyleft
     };
   } catch (error) {
     console.error("Error analyzing dependencies:", error);
@@ -251,7 +287,62 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
       gplCount: 0,
       agplCount: 0,
       gplDependencies: [],
-      agplDependencies: []
+      agplDependencies: [],
+      hasCopyleft: false
+    };
+  }
+}
+
+// Rate repository description quality
+export async function rateRepoDescription(owner: string, repo: string): Promise<DescriptionRating> {
+  try {
+    // Fetch repository information
+    const repoInfoUrl = `https://api.github.com/repos/${owner}/${repo}`;
+    const response = await fetch(repoInfoUrl);
+    
+    if (!response.ok) {
+      return {
+        text: "Unable to fetch repository description",
+        rating: "missing"
+      };
+    }
+    
+    const repoInfo = await response.json();
+    const description = repoInfo.description || "";
+    
+    if (!description) {
+      return {
+        text: "Repository has no description",
+        rating: "missing",
+        feedback: "Add a clear description explaining the purpose of this repository"
+      };
+    }
+    
+    // Simple rating based on description length and content
+    if (description.length < 10) {
+      return {
+        text: description,
+        rating: "poor",
+        feedback: "Description is too short. Add more details about what the project does."
+      };
+    } else if (description.length < 30) {
+      return {
+        text: description,
+        rating: "good",
+        feedback: "Decent description but could be more detailed."
+      };
+    } else {
+      return {
+        text: description,
+        rating: "great",
+        feedback: "Excellent description with good detail."
+      };
+    }
+  } catch (error) {
+    console.error("Error rating repository description:", error);
+    return {
+      text: "Error analyzing repository description",
+      rating: "missing"
     };
   }
 }
@@ -286,39 +377,22 @@ export async function analyzePackageJson(fileUrl: string): Promise<{
   }
 }
 
-// Common file requirements presets
-export const commonRequirements: Record<string, FileRequirement[]> = {
-  basic: [
-    { path: 'README.md', required: true, description: 'Project documentation' },
-    { path: 'LICENSE', required: true, description: 'License information' },
-    { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
-    { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
-    { path: 'SUPPORT.md', required: true, description: 'Support information' },
-    { path: 'SECURITY.md', required: true, description: 'Security policy' },
-    { path: '.gitignore', required: false, description: 'Git ignore rules' }
-  ],
-  javascript: [
-    { path: 'package.json', required: true, description: 'NPM package configuration' },
-    { path: 'package-lock.json', required: false, description: 'NPM dependency lock file' },
-    { path: 'README.md', required: true, description: 'Project documentation' },
-    { path: 'LICENSE', required: true, description: 'License information' },
-    { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
-    { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
-    { path: 'SUPPORT.md', required: true, description: 'Support information' },
-    { path: 'SECURITY.md', required: true, description: 'Security policy' },
-    { path: '.gitignore', required: false, description: 'Git ignore rules' },
-    { path: '.eslintrc.json', required: false, description: 'ESLint configuration' },
-    { path: 'tsconfig.json', required: false, description: 'TypeScript configuration' }
-  ],
-  python: [
-    { path: 'README.md', required: true, description: 'Project documentation' },
-    { path: 'LICENSE', required: true, description: 'License information' },
-    { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
-    { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
-    { path: 'SUPPORT.md', required: true, description: 'Support information' },
-    { path: 'SECURITY.md', required: true, description: 'Security policy' },
-    { path: '.gitignore', required: false, description: 'Git ignore rules' },
-    { path: 'requirements.txt', required: true, description: 'Python dependencies' },
-    { path: 'setup.py', required: false, description: 'Package installation script' }
-  ]
-}
+// Combined comprehensive file requirements list
+export const consolidatedRequirements: FileRequirement[] = [
+  { path: 'README.md', required: true, description: 'Project documentation' },
+  { path: 'LICENSE', required: true, description: 'License information' },
+  { path: 'LICENSE.txt', required: false, description: 'License information (alternate)' },
+  { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
+  { path: 'SUPPORT.md', required: true, description: 'Support information' },
+  { path: 'SECURITY.md', required: true, description: 'Security policy' },
+  { path: '.gitignore', required: false, description: 'Git ignore rules' },
+  { path: 'CODE_OF_CONDUCT.md', required: false, description: 'Code of conduct' },
+  // JavaScript/TypeScript specific
+  { path: 'package.json', required: false, description: 'NPM package configuration' },
+  { path: 'package-lock.json', required: false, description: 'NPM dependency lock file' },
+  { path: '.eslintrc.json', required: false, description: 'ESLint configuration' },
+  { path: 'tsconfig.json', required: false, description: 'TypeScript configuration' },
+  // Python specific
+  { path: 'requirements.txt', required: false, description: 'Python dependencies' },
+  { path: 'setup.py', required: false, description: 'Package installation script' }
+];

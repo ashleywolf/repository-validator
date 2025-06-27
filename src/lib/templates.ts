@@ -380,15 +380,11 @@ setup(
   }
 };
 
-// Combine templates by category
-export const getTemplatesByType = (type: string): Record<string, FileTemplate> => {
-  const baseTemplates = {...fileTemplates};
-  
-  if (type === 'javascript') {
-    return {...baseTemplates, ...javascriptTemplates};
-  } else if (type === 'python') {
-    return {...baseTemplates, ...pythonTemplates};
-  }
-  
-  return baseTemplates;
+// Get all templates
+export const getAllTemplates = (): Record<string, FileTemplate> => {
+  return {
+    ...fileTemplates,
+    ...javascriptTemplates,
+    ...pythonTemplates
+  };
 };

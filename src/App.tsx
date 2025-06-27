@@ -8,18 +8,19 @@ import {
   parseGitHubUrl,
   getOrgDotGithubApiUrl,
   getTemplateApiUrl,
-  commonRequirements,
+  consolidatedRequirements,
   checkLicenseFile,
   analyzeDependencies,
   analyzePackageJson,
-  analyzeSbomData
+  analyzeSbomData,
+  rateRepoDescription,
+  DescriptionRating
 } from "./lib/utils";
-import { FileTemplate, getTemplatesByType } from "./lib/templates";
+import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -33,18 +34,21 @@ import {
   FilePlus,
   FileText,
   File,
-  Package
+  Package,
+  Star,
+  StarHalf,
+  LinkSimple
 } from "@phosphor-icons/react";
 
 function App() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activePreset, setActivePreset] = useState("basic");
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
-  const [requirements, setRequirements] = useState<FileRequirement[]>(commonRequirements.basic);
+  const [requirements] = useState<FileRequirement[]>(consolidatedRequirements);
   const [selectedTemplate, setSelectedTemplate] = useState<FileTemplate | null>(null);
   const [showTemplateView, setShowTemplateView] = useState(false);
+  const [descriptionRating, setDescriptionRating] = useState<DescriptionRating | null>(null);
 
   // Handle URL validation and repo scanning
   const handleValidate = async () => {
@@ -53,6 +57,7 @@ function App() {
     setValidationSummary(null);
     setSelectedTemplate(null);
     setShowTemplateView(false);
+    setDescriptionRating(null);
     
     // Validate URL format
     if (!isValidGitHubUrl(url)) {
@@ -98,6 +103,10 @@ function App() {
         download_url: item.download_url
       }));
       
+      // Get repository description rating
+      const repoDescriptionRating = await rateRepoDescription(owner, repo);
+      setDescriptionRating(repoDescriptionRating);
+      
       // Validate files against requirements
       const results: Record<string, ValidationResult> = {};
       let missingRequired = 0;
@@ -133,7 +142,8 @@ function App() {
             exists: true,
             message: `${req.description} found in repository`,
             status: 'success',
-            location: 'repo'
+            location: 'repo',
+            fileUrl: `https://github.com/${owner}/${repo}/blob/main/${fileInRepo.path}`
           };
           
           // Special checks for specific files
@@ -145,7 +155,7 @@ function App() {
               
               if (!licenseCheck.isValid) {
                 result.status = 'warning';
-                result.message = `${req.description} found but ${licenseCheck.message.toLowerCase()}`;
+                result.message = `${req.description} found but missing GitHub copyright notice`;
               }
             } catch (error) {
               console.error("Error checking license:", error);
@@ -156,9 +166,9 @@ function App() {
               const dependencyAnalysis = await analyzeDependencies(fileInRepo.download_url);
               result.dependencyAnalysis = dependencyAnalysis;
               
-              if (dependencyAnalysis.gplCount > 0 || dependencyAnalysis.agplCount > 0) {
+              if (dependencyAnalysis.hasCopyleft) {
                 result.status = 'warning';
-                result.message = `${req.description} found with ${dependencyAnalysis.gplCount} GPL and ${dependencyAnalysis.agplCount} AGPL dependencies`;
+                result.message = `${req.description} found with copyleft licenses that require review`;
               }
             } catch (error) {
               console.error("Error analyzing dependencies:", error);
@@ -208,11 +218,16 @@ function App() {
               );
               
               if (fileExistsInOrg) {
+                const orgFile = orgContents.find((item: any) => 
+                  item.path.toLowerCase() === req.path.toLowerCase()
+                );
+                
                 results[req.path] = {
                   exists: true,
                   message: `${req.description} found in organization .github repo`,
                   status: 'success',
-                  location: 'org'
+                  location: 'org',
+                  fileUrl: `https://github.com/${owner}/.github/blob/main/${orgFile.path}`
                 };
                 continue;
               }
@@ -264,19 +279,9 @@ function App() {
     }
   };
   
-  // Handle changing requirements preset
-  const handlePresetChange = (preset: string) => {
-    setActivePreset(preset);
-    setRequirements(commonRequirements[preset]);
-    // Reset validation if requirements change
-    setValidationSummary(null);
-    setSelectedTemplate(null);
-    setShowTemplateView(false);
-  };
-  
   // Get appropriate template for a file
   const handleSelectTemplate = async (filePath: string) => {
-    const templates = getTemplatesByType(activePreset);
+    const templates = getAllTemplates();
     
     if (templates[filePath]) {
       setSelectedTemplate(templates[filePath]);
@@ -317,6 +322,39 @@ function App() {
     setShowTemplateView(false);
   };
   
+  // Render the rating badge based on the rating level
+  const renderRatingBadge = (rating: 'great' | 'good' | 'poor' | 'missing') => {
+    switch (rating) {
+      case 'great':
+        return (
+          <Badge className="bg-green-500">
+            <Star className="mr-1 h-3 w-3" weight="fill" />
+            Great
+          </Badge>
+        );
+      case 'good':
+        return (
+          <Badge variant="outline" className="text-amber-500 border-amber-500">
+            <StarHalf className="mr-1 h-3 w-3" weight="fill" />
+            Good
+          </Badge>
+        );
+      case 'poor':
+        return (
+          <Badge variant="outline" className="text-orange-500 border-orange-500">
+            <Warning className="mr-1 h-3 w-3" />
+            Poor
+          </Badge>
+        );
+      case 'missing':
+        return (
+          <Badge variant="destructive">
+            <X className="mr-1 h-3 w-3" />
+            Missing
+          </Badge>
+        );
+    }
+  };
   
   return (
     <div className="container mx-auto py-10 px-4">
@@ -377,218 +415,230 @@ function App() {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
-                
-                <div>
-                  <h3 className="text-sm font-medium mb-2">Validation Template:</h3>
-                  <Tabs value={activePreset} onValueChange={handlePresetChange}>
-                    <TabsList className="grid grid-cols-3 w-full sm:w-auto">
-                      <TabsTrigger value="basic">Basic</TabsTrigger>
-                      <TabsTrigger value="javascript">JavaScript</TabsTrigger>
-                      <TabsTrigger value="python">Python</TabsTrigger>
-                    </TabsList>
-                    <div className="mt-4">
-                      <div className="text-sm text-muted-foreground">
-                        {activePreset === "basic" && "Checks for essential files in any open source repository"}
-                        {activePreset === "javascript" && "Checks for JS/TS open source project requirements"}
-                        {activePreset === "python" && "Checks for Python open source project requirements"}
-                      </div>
-                    </div>
-                  </Tabs>
-                </div>
               </div>
             </CardContent>
           </Card>
           
           {validationSummary && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex justify-between">
-                  <span>Validation Results</span>
-                  <div className="flex gap-2">
-                    {validationSummary.missingRequired > 0 ? (
-                      <Badge variant="destructive">
-                        {validationSummary.missingRequired} required missing
-                      </Badge>
-                    ) : (
-                      <Badge variant="default" className="bg-accent">
-                        All required files present
-                      </Badge>
-                    )}
-                    {validationSummary.missingRecommended > 0 && (
-                      <Badge variant="outline" className="text-amber-500 border-amber-500">
-                        {validationSummary.missingRecommended} recommended missing
-                      </Badge>
-                    )}
-                  </div>
-                </CardTitle>
-                <CardDescription>
-                  Check if all required files are present in {validationSummary.repoName}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[400px] pr-4">
-                  <div className="space-y-4">
-                    {Object.entries(validationSummary.results).map(([path, result]) => (
-                      <div key={path} className="border rounded-md p-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium">{path}</span>
-                          <Badge 
-                            variant={
-                              result.status === 'success' 
-                                ? 'default' 
-                                : result.status === 'warning' 
-                                  ? 'outline' 
-                                  : 'destructive'
-                            }
-                            className={
-                              result.status === 'warning'
-                                ? 'text-amber-500 border-amber-500'
-                                : ''
-                            }
-                          >
-                            {result.status === 'success' && (
-                              <Check className="mr-1 h-3 w-3" />
-                            )}
-                            {result.status === 'warning' && (
-                              <Warning className="mr-1 h-3 w-3" />
-                            )}
-                            {result.status === 'error' && (
-                              <X className="mr-1 h-3 w-3" />
-                            )}
-                            {result.status === 'success' ? 'Present' : result.status === 'warning' ? 'Warning' : 'Required'}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{result.message}</p>
-                        
-                        {result.location === 'org' && (
-                          <div className="mt-2 text-xs bg-secondary/50 text-secondary-foreground rounded p-1">
-                            Found in organization-level .github repository
-                          </div>
-                        )}
-                        
-                        {/* License check result */}
-                        {result.licenseCheck && (
-                          <div className={`mt-2 text-xs ${result.licenseCheck.isValid ? 'bg-green-50 text-green-800' : 'bg-amber-100 text-amber-800'} rounded p-1`}>
-                            {result.licenseCheck.message}
-                          </div>
-                        )}
-                        
-                        {/* Package.json dependency count */}
-                        {result.dependencyAnalysis?.dependenciesCount !== undefined && (
-                          <div className="mt-2">
-                            <div className="text-xs font-medium mb-1 flex items-center">
-                              <Package className="h-3 w-3 mr-1" />
-                              Dependency Analysis:
+            <>
+              {/* Description Rating Card */}
+              {descriptionRating && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle className="flex justify-between">
+                      <span>Repository Description</span>
+                      {renderRatingBadge(descriptionRating.rating)}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="p-3 bg-secondary/20 rounded-md">
+                      <p className="font-medium">{descriptionRating.text || "No description provided"}</p>
+                      {descriptionRating.feedback && (
+                        <p className="text-sm text-muted-foreground mt-2">{descriptionRating.feedback}</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* File Validation Results Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex justify-between">
+                    <span>Compliance Results</span>
+                    <div className="flex gap-2">
+                      {validationSummary.missingRequired > 0 ? (
+                        <Badge variant="destructive">
+                          {validationSummary.missingRequired} required missing
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="bg-accent">
+                          All required files present
+                        </Badge>
+                      )}
+                      {validationSummary.missingRecommended > 0 && (
+                        <Badge variant="outline" className="text-amber-500 border-amber-500">
+                          {validationSummary.missingRecommended} recommended missing
+                        </Badge>
+                      )}
+                    </div>
+                  </CardTitle>
+                  <CardDescription>
+                    Check if all required files are present in {validationSummary.repoName}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[500px] pr-4">
+                    <div className="space-y-4">
+                      {Object.entries(validationSummary.results).map(([path, result]) => (
+                        <div key={path} className="border rounded-md p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="font-medium flex items-center">
+                              {path}
+                              {result.fileUrl && (
+                                <a 
+                                  href={result.fileUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="ml-2 text-primary hover:underline flex items-center text-sm"
+                                >
+                                  <LinkSimple className="h-3 w-3" />
+                                  <span className="ml-1">View</span>
+                                </a>
+                              )}
                             </div>
-                            <div className="bg-secondary/20 p-2 rounded text-xs">
-                              <div className="grid grid-cols-2 gap-1">
-                                <div className="flex justify-between">
-                                  <span>Production dependencies:</span>
-                                  <span className="font-medium">{result.dependencyAnalysis.dependenciesCount}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Dev dependencies:</span>
-                                  <span className="font-medium">{result.dependencyAnalysis.devDependenciesCount}</span>
-                                </div>
-                                <div className="flex justify-between col-span-2">
-                                  <span>Total package dependencies:</span>
-                                  <span className="font-medium">{result.dependencyAnalysis.dependenciesCount + result.dependencyAnalysis.devDependenciesCount}</span>
-                                </div>
-                                
-                                {/* SBOM dependency data */}
-                                {result.dependencyAnalysis.sbomDependenciesCount !== undefined && (
-                                  <>
-                                    <div className="flex justify-between col-span-2 mt-1 pt-1 border-t border-secondary/30">
-                                      <span>SBOM total dependencies:</span>
-                                      <span className="font-medium">{result.dependencyAnalysis.sbomDependenciesCount}</span>
-                                    </div>
-                                    {result.dependencyAnalysis.mitCount !== undefined && (
-                                      <div className="flex justify-between col-span-2">
-                                        <span>MIT licensed dependencies:</span>
-                                        <span className="font-medium">{result.dependencyAnalysis.mitCount}</span>
+                            <Badge 
+                              variant={
+                                result.status === 'success' 
+                                  ? 'default' 
+                                  : result.status === 'warning' 
+                                    ? 'outline' 
+                                    : 'destructive'
+                              }
+                              className={
+                                result.status === 'warning'
+                                  ? 'text-amber-500 border-amber-500'
+                                  : ''
+                              }
+                            >
+                              {result.status === 'success' && (
+                                <Check className="mr-1 h-3 w-3" />
+                              )}
+                              {result.status === 'warning' && (
+                                <Warning className="mr-1 h-3 w-3" />
+                              )}
+                              {result.status === 'error' && (
+                                <X className="mr-1 h-3 w-3" />
+                              )}
+                              {result.status === 'success' ? 'Present' : result.status === 'warning' ? 'Warning' : 'Required'}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{result.message}</p>
+                          
+                          {result.location === 'org' && (
+                            <div className="mt-2 text-xs bg-secondary/50 text-secondary-foreground rounded p-1">
+                              Found in organization-level .github repository
+                            </div>
+                          )}
+                          
+                          {/* License check result - simplified */}
+                          {result.licenseCheck && (
+                            <div className="mt-2 text-xs bg-secondary/50 rounded p-2">
+                              <div className="font-medium mb-1">License Information:</div>
+                              {result.licenseCheck.copyrightHolder && (
+                                <div>Copyright holder: <span className="font-medium">{result.licenseCheck.copyrightHolder}</span></div>
+                              )}
+                              {result.licenseCheck.licenseName && (
+                                <div>License type: <span className="font-medium">{result.licenseCheck.licenseName}</span></div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Package.json dependency count */}
+                          {result.dependencyAnalysis?.dependenciesCount !== undefined && (
+                            <div className="mt-2">
+                              <div className="text-xs font-medium mb-1 flex items-center">
+                                <Package className="h-3 w-3 mr-1" />
+                                Dependency Analysis:
+                              </div>
+                              <div className="bg-secondary/20 p-2 rounded text-xs">
+                                <div className="grid grid-cols-2 gap-1">
+                                  <div className="flex justify-between">
+                                    <span>Production dependencies:</span>
+                                    <span className="font-medium">{result.dependencyAnalysis.dependenciesCount}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Dev dependencies:</span>
+                                    <span className="font-medium">{result.dependencyAnalysis.devDependenciesCount}</span>
+                                  </div>
+                                  <div className="flex justify-between col-span-2">
+                                    <span>Total package dependencies:</span>
+                                    <span className="font-medium">{result.dependencyAnalysis.dependenciesCount + (result.dependencyAnalysis.devDependenciesCount || 0)}</span>
+                                  </div>
+                                  
+                                  {/* SBOM dependency data */}
+                                  {result.dependencyAnalysis.sbomDependenciesCount !== undefined && (
+                                    <>
+                                      <div className="flex justify-between col-span-2 mt-1 pt-1 border-t border-secondary/30">
+                                        <span>SBOM total dependencies:</span>
+                                        <span className="font-medium">{result.dependencyAnalysis.sbomDependenciesCount}</span>
                                       </div>
-                                    )}
+                                      {result.dependencyAnalysis.mitCount !== undefined && (
+                                        <div className="flex justify-between col-span-2">
+                                          <span>MIT licensed dependencies:</span>
+                                          <span className="font-medium">{result.dependencyAnalysis.mitCount}</span>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Dependency analysis result - warning for copyleft */}
+                          {result.dependencyAnalysis && (result.dependencyAnalysis.gplCount > 0 || result.dependencyAnalysis.agplCount > 0) && (
+                            <div className="mt-2">
+                              <div className="text-xs font-medium mb-1 text-amber-700">Copyleft License Warning:</div>
+                              <div className="text-xs bg-amber-50 p-2 rounded text-amber-800">
+                                <p className="font-medium mb-1">This package contains copyleft licensed dependencies that require review!</p>
+                                
+                                {result.dependencyAnalysis.gplCount > 0 && (
+                                  <>
+                                    <div className="font-medium mt-1">GPL Dependencies ({result.dependencyAnalysis.gplCount}):</div>
+                                    <ul className="list-disc pl-4">
+                                      {result.dependencyAnalysis.gplDependencies.map((dep, i) => (
+                                        <li key={i}>{dep}</li>
+                                      ))}
+                                    </ul>
+                                  </>
+                                )}
+                                
+                                {result.dependencyAnalysis.agplCount > 0 && (
+                                  <>
+                                    <div className="font-medium mt-1">AGPL Dependencies ({result.dependencyAnalysis.agplCount}):</div>
+                                    <ul className="list-disc pl-4">
+                                      {result.dependencyAnalysis.agplDependencies.map((dep, i) => (
+                                        <li key={i}>{dep}</li>
+                                      ))}
+                                    </ul>
                                   </>
                                 )}
                               </div>
                             </div>
-                          </div>
-                        )}
-                        
-                        {/* Dependency analysis result */}
-                        {result.dependencyAnalysis && (result.dependencyAnalysis.gplCount > 0 || result.dependencyAnalysis.agplCount > 0) && (
-                          <div className="mt-2">
-                            <div className="text-xs font-medium mb-1">Dependency License Analysis:</div>
-                            <div className="text-xs space-y-1">
-                              <div className="flex justify-between">
-                                <span>Total Dependencies:</span>
-                                <span>{result.dependencyAnalysis.total}</span>
-                              </div>
-                              
-                              {result.dependencyAnalysis.gplCount > 0 && (
-                                <>
-                                  <div className="flex justify-between text-amber-700">
-                                    <span>GPL Dependencies:</span>
-                                    <span>{result.dependencyAnalysis.gplCount}</span>
-                                  </div>
-                                  <div className="bg-amber-50 p-1 rounded text-amber-800">
-                                    {result.dependencyAnalysis.gplDependencies.map((dep, i) => (
-                                      <div key={i}>{dep}</div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-                              
-                              {result.dependencyAnalysis.agplCount > 0 && (
-                                <>
-                                  <div className="flex justify-between text-red-700">
-                                    <span>AGPL Dependencies:</span>
-                                    <span>{result.dependencyAnalysis.agplCount}</span>
-                                  </div>
-                                  <div className="bg-red-50 p-1 rounded text-red-800">
-                                    {result.dependencyAnalysis.agplDependencies.map((dep, i) => (
-                                      <div key={i}>{dep}</div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
+                          )}
+                          
+                          {result.status === 'error' && (
+                            <div className="mt-2 flex justify-end">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-xs"
+                                onClick={() => handleSelectTemplate(path)}
+                              >
+                                <FilePlus className="mr-1 h-3 w-3" />
+                                Create from template
+                              </Button>
                             </div>
-                          </div>
-                        )}
-                        
-                        {result.status === 'error' && (
-                          <div className="mt-2 flex justify-end">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="text-xs"
-                              onClick={() => handleSelectTemplate(path)}
-                            >
-                              <FilePlus className="mr-1 h-3 w-3" />
-                              Create from template
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-              <CardFooter className="flex justify-between border-t pt-4">
-                <a 
-                  href={validationSummary.repoUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary text-sm hover:underline flex items-center"
-                >
-                  <GithubLogo className="mr-1" size={16} />
-                  View Repository
-                </a>
-                <div className="text-sm text-muted-foreground">
-                  Validated against {activePreset} template
-                </div>
-              </CardFooter>
-            </Card>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+                <CardFooter className="flex justify-between border-t pt-4">
+                  <a 
+                    href={validationSummary.repoUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary text-sm hover:underline flex items-center"
+                  >
+                    <GithubLogo className="mr-1" size={16} />
+                    View Repository
+                  </a>
+                </CardFooter>
+              </Card>
+            </>
           )}
         </>
       ) : (

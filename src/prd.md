@@ -1,7 +1,7 @@
 # GitHub Repo Wizard PRD
 
 ## Core Purpose & Success
-- **Mission Statement**: Validate GitHub repository structures against standardized templates to ensure open source compliance and best practices.
+- **Mission Statement**: Validate GitHub repository structures against compliance standards to ensure open source readiness.
 - **Success Indicators**: Users can successfully validate repositories and identify missing required files, with actionable information on what needs to be added.
 - **Experience Qualities**: Professional, Informative, Efficient
 
@@ -12,8 +12,8 @@
 ## Thought Process for Feature Selection
 - **Core Problem Analysis**: Open source repositories often lack critical files needed for compliance, documentation, and community standards.
 - **User Context**: Developers working on open source projects need to ensure their repos follow best practices before public release.
-- **Critical Path**: Enter repo URL → Select validation template → View validation results → Add missing files
-- **Key Moments**: Validation scan completion, viewing categorized results (required vs. recommended files)
+- **Critical Path**: Enter repo URL → View validation results → Add missing files
+- **Key Moments**: Validation scan completion, viewing comprehensive compliance results, rating of repository description
 
 ## Essential Features
 1. **GitHub Repository URL Input & Validation**
@@ -21,30 +21,30 @@
    - Why it matters: Ensures users provide valid inputs before running validation
    - Success criteria: Prevents invalid URL submissions with helpful error messages
 
-2. **Template Selection**
-   - What it does: Allows users to choose from different validation templates (Basic, JavaScript, Python)
-   - Why it matters: Different project types have different file requirements
-   - Success criteria: Templates contain appropriate requirements for each project type
-
-3. **Repository Structure Validation**
-   - What it does: Validates repository against selected template requirements
+2. **Comprehensive Repository Structure Validation**
+   - What it does: Validates repository against consolidated compliance requirements
    - Why it matters: Identifies missing required and recommended files
    - Success criteria: Accurately detects files in repo and organization .github folder
+
+3. **Repository Description Rating**
+   - What it does: Analyzes and rates the quality of the repository description
+   - Why it matters: Good descriptions are essential for discoverability and user understanding
+   - Success criteria: Provides meaningful ratings (great, good, poor, missing) with feedback
 
 4. **Validation Results Display**
    - What it does: Shows validation results, highlighting missing required and recommended files
    - Why it matters: Clearly indicates compliance status and improvement opportunities
-   - Success criteria: Results are categorized by severity and provide clear information on each requirement
+   - Success criteria: Results are categorized by severity with direct links to existing files
 
 5. **License Validation**
-   - What it does: Checks if LICENSE file contains GitHub copyright notices and displays the relevant copyright sentence
+   - What it does: Extracts and displays copyright holder and license type information
    - Why it matters: Ensures proper licensing and attribution
-   - Success criteria: Accurately detects and displays GitHub copyright references in various formats
+   - Success criteria: Accurately extracts and displays copyright holder and license type
 
 6. **Dependency License Analysis**
-   - What it does: Analyzes package-lock.json, package.json, and repository SBOM for license information
+   - What it does: Analyzes dependencies for copyleft licenses that require review
    - Why it matters: Helps identify potentially problematic license combinations and provides dependency metrics
-   - Success criteria: Accurately counts and displays dependency information, including MIT licenses from SBOM
+   - Success criteria: Warns users of copyleft licenses that require legal review
 
 7. **Template Creation**
    - What it does: Provides templates for missing required files from GitHub OSPO repository
@@ -113,11 +113,11 @@
 - **Technical Constraints**: GitHub API limitations and response formatting
 
 ## Implementation Considerations
-- **Scalability Needs**: Potential to add more template types and customizable requirements
+- **Scalability Needs**: Potential to add more detailed compliance checks and customizable requirements
 - **Testing Focus**: API response handling, error states, and template accuracy
-- **Critical Questions**: How to handle nested directories and complex repository structures?
+- **Critical Questions**: How to handle more complex license and dependency analysis?
 
 ## Reflection
 - This approach uniquely bridges the gap between technical requirements and user-friendly validation
-- The focus on actionable results rather than just reporting problems sets this tool apart
-- Adding template file content previews would make this solution truly exceptional
+- The consolidated compliance view makes it easy to see all requirements at once without switching contexts
+- The description rating and direct file links provide additional value to users beyond basic compliance checks
