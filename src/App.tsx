@@ -671,7 +671,7 @@ function AppContent() {
               <Card className="mb-6 mission-card spy-glow">
                 <CardHeader>
                   <CardTitle className="flex justify-between">
-                    <span>Mission Intelligence</span>
+                    <span>Repository Overview</span>
                     {isPrivateRepo ? (
                       <Badge variant="outline" className="bg-secondary/50">
                         <LockSimple className="mr-1 h-3 w-3" />
@@ -731,7 +731,7 @@ function AppContent() {
               <Card className="mission-card spy-glow">
                 <CardHeader>
                   <CardTitle className="flex justify-between">
-                    <span>Mission Report</span>
+                    <span>Validation Results</span>
                     <div className="flex gap-2">
                       {validationSummary.missingRequired > 0 ? (
                         <Badge variant="destructive">
@@ -750,13 +750,23 @@ function AppContent() {
                     </div>
                   </CardTitle>
                   <CardDescription>
-                    Mission status for {validationSummary.repoName}
+                    Compliance status for {validationSummary.repoName}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
                     <div className="space-y-4">
-                      {Object.entries(validationSummary.results).map(([path, result]) => (
+                      {/* Sort validation results to prioritize dependency analysis */}
+                      {Object.entries(validationSummary.results)
+                        .sort(([pathA], [pathB]) => {
+                          // Priority order: dependency-analysis first, followed by LICENSE, then others alphabetically
+                          if (pathA === 'dependency-analysis') return -1;
+                          if (pathB === 'dependency-analysis') return 1;
+                          if (pathA === 'LICENSE') return -1;
+                          if (pathB === 'LICENSE') return 1;
+                          return pathA.localeCompare(pathB);
+                        })
+                        .map(([path, result]) => (
                         <div key={path} className="border rounded-md p-3">
                           <div className="flex items-center justify-between mb-1">
                             <div className="font-medium flex items-center">
@@ -957,10 +967,8 @@ function AppContent() {
                                 Consider squashing repository history before open-sourcing to remove any sensitive information
                                 from previous commits that may no longer be in the current files.
                               </p>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="w-full mt-1 text-xs"
+                              <button 
+                                className="text-xs text-primary hover:underline cursor-pointer mt-1"
                                 onClick={() => {
                                   navigator.clipboard.writeText(`
 # Commands to squash repository history
@@ -989,8 +997,8 @@ git push -f origin main
                                   });
                                 }}
                               >
-                                Copy Squash Instructions
-                              </Button>
+                                Copy squash instructions
+                              </button>
                             </div>
                           )}
                           

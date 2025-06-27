@@ -642,7 +642,6 @@ export const consolidatedRequirements: FileRequirement[] = [
   { path: 'CONTRIBUTING.md', required: true, description: 'Contribution guidelines' },
   { path: 'SUPPORT.md', required: true, description: 'Support information' },
   { path: 'SECURITY.md', required: true, description: 'Security policy' },
-  { path: '.gitignore', required: false, description: 'Git ignore rules' },
   { path: 'CODE_OF_CONDUCT.md', required: false, description: 'Code of conduct' },
   // JavaScript/TypeScript specific
   { path: 'package.json', required: false, description: 'NPM package configuration' },
