@@ -21,32 +21,37 @@
    - Why it matters: Ensures users provide valid inputs before running validation
    - Success criteria: Prevents invalid URL submissions with helpful error messages
 
-2. **Comprehensive Repository Structure Validation**
+2. **GitHub OAuth Authentication**
+   - What it does: Allows users to authenticate with their GitHub account
+   - Why it matters: Enables access to private repositories and increases API rate limits
+   - Success criteria: Successful authentication with clear user feedback and token management
+
+3. **Comprehensive Repository Structure Validation**
    - What it does: Validates repository against consolidated compliance requirements
    - Why it matters: Identifies missing required and recommended files
    - Success criteria: Accurately detects files in repo and organization .github folder
 
-3. **Repository Description Rating**
+4. **Repository Description Rating**
    - What it does: Analyzes and rates the quality of the repository description
    - Why it matters: Good descriptions are essential for discoverability and user understanding
    - Success criteria: Provides meaningful ratings (great, good, poor, missing) with feedback
 
-4. **Validation Results Display**
+5. **Validation Results Display**
    - What it does: Shows validation results, highlighting missing required and recommended files
    - Why it matters: Clearly indicates compliance status and improvement opportunities
    - Success criteria: Results are categorized by severity with direct links to existing files
 
-5. **License Validation**
+6. **License Validation**
    - What it does: Extracts and displays copyright holder and license type information
    - Why it matters: Ensures proper licensing and attribution
    - Success criteria: Accurately extracts and displays copyright holder and license type
 
-6. **Dependency License Analysis**
+7. **Dependency License Analysis**
    - What it does: Analyzes dependencies for copyleft licenses that require review
    - Why it matters: Helps identify potentially problematic license combinations and provides dependency metrics
    - Success criteria: Warns users of copyleft licenses that require legal review
 
-7. **Template Creation**
+8. **Template Creation**
    - What it does: Provides templates for missing required files from GitHub OSPO repository
    - Why it matters: Makes it easy to add missing files with proper content
    - Success criteria: Templates are accessible and can be used to create PRs

@@ -18,6 +18,8 @@ import {
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
+import { GitHubAuth } from "./components/github-auth";
+import { AuthProvider, useAuth } from "./context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,10 +39,14 @@ import {
   Package,
   Star,
   StarHalf,
-  LinkSimple
+  LinkSimple,
+  FolderOpen,
+  LockSimple,
+  LockOpen
 } from "@phosphor-icons/react";
 
-function App() {
+function AppContent() {
+  const { authState, octokit } = useAuth();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +55,7 @@ function App() {
   const [selectedTemplate, setSelectedTemplate] = useState<FileTemplate | null>(null);
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [descriptionRating, setDescriptionRating] = useState<DescriptionRating | null>(null);
+  const [isPrivateRepo, setIsPrivateRepo] = useState(false);
 
   // Handle URL validation and repo scanning
   const handleValidate = async () => {
@@ -58,6 +65,7 @@ function App() {
     setSelectedTemplate(null);
     setShowTemplateView(false);
     setDescriptionRating(null);
+    setIsPrivateRepo(false);
     
     // Validate URL format
     if (!isValidGitHubUrl(url)) {
@@ -79,20 +87,53 @@ function App() {
       // Create the API URL for fetching contents
       const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
       
-      // Fetch repository contents
-      const response = await fetch(apiUrl);
+      let repoContents;
+      let isPrivate = false;
       
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("Repository not found or is private");
-        } else if (response.status === 403) {
-          throw new Error("API rate limit exceeded. Please try again later");
-        } else {
-          throw new Error(`GitHub API error: ${response.status}`);
+      // Check if we should use authenticated API call
+      if (authState.isAuthenticated && octokit) {
+        try {
+          // Get repository info first to check if it's private
+          const repoInfoResponse = await octokit.request("GET /repos/{owner}/{repo}", {
+            owner,
+            repo
+          });
+          
+          isPrivate = repoInfoResponse.data.private;
+          setIsPrivateRepo(isPrivate);
+          
+          // Fetch repository contents using authenticated client
+          const response = await octokit.request("GET /repos/{owner}/{repo}/contents", {
+            owner,
+            repo
+          });
+          
+          repoContents = response.data;
+        } catch (error: any) {
+          console.error("Error fetching with authentication:", error);
+          
+          if (error.status === 404) {
+            throw new Error("Repository not found or you don't have access to it");
+          } else {
+            throw new Error(`GitHub API error: ${error.status}`);
+          }
         }
+      } else {
+        // Unauthenticated API call for public repositories
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Repository not found or is private. Please sign in with GitHub to access private repositories.");
+          } else if (response.status === 403) {
+            throw new Error("API rate limit exceeded. Please sign in with GitHub to increase your rate limit.");
+          } else {
+            throw new Error(`GitHub API error: ${response.status}`);
+          }
+        }
+        
+        repoContents = await response.json();
       }
-      
-      const repoContents = await response.json();
       
       // Transform API response to our RepoFile format
       const files: RepoFile[] = repoContents.map((item: any) => ({
@@ -209,28 +250,42 @@ function App() {
           // File not found in repo, check organization .github repo
           try {
             const orgDotGithubUrl = getOrgDotGithubApiUrl(owner);
-            const orgResponse = await fetch(orgDotGithubUrl);
             
-            if (orgResponse.ok) {
-              const orgContents = await orgResponse.json();
-              const fileExistsInOrg = orgContents.some((item: any) => 
+            let orgContents;
+            
+            // Use authenticated client if available
+            if (authState.isAuthenticated && octokit) {
+              try {
+                const orgResponse = await octokit.request("GET /repos/{owner}/.github/contents", {
+                  owner
+                });
+                orgContents = orgResponse.data;
+              } catch (error) {
+                // Organization .github repo might not exist or be inaccessible
+                orgContents = [];
+              }
+            } else {
+              const orgResponse = await fetch(orgDotGithubUrl);
+              orgContents = orgResponse.ok ? await orgResponse.json() : [];
+            }
+            
+            const fileExistsInOrg = orgContents.some((item: any) => 
+              item.path.toLowerCase() === req.path.toLowerCase()
+            );
+            
+            if (fileExistsInOrg) {
+              const orgFile = orgContents.find((item: any) => 
                 item.path.toLowerCase() === req.path.toLowerCase()
               );
               
-              if (fileExistsInOrg) {
-                const orgFile = orgContents.find((item: any) => 
-                  item.path.toLowerCase() === req.path.toLowerCase()
-                );
-                
-                results[req.path] = {
-                  exists: true,
-                  message: `${req.description} found in organization .github repo`,
-                  status: 'success',
-                  location: 'org',
-                  fileUrl: `https://github.com/${owner}/.github/blob/main/${orgFile.path}`
-                };
-                continue;
-              }
+              results[req.path] = {
+                exists: true,
+                message: `${req.description} found in organization .github repo`,
+                status: 'success',
+                location: 'org',
+                fileUrl: `https://github.com/${owner}/.github/blob/main/${orgFile.path}`
+              };
+              continue;
             }
           } catch (error) {
             console.error("Error checking organization .github repo:", error);
@@ -291,23 +346,39 @@ function App() {
       try {
         setLoading(true);
         const templateUrl = getTemplateApiUrl(filePath);
-        const response = await fetch(templateUrl);
         
-        if (response.ok) {
-          const data = await response.json();
-          const content = atob(data.content); // Decode base64 content
-          
-          const customTemplate: FileTemplate = {
-            filename: filePath,
-            description: `${filePath} template from GitHub's OSPO templates`,
-            content: content
-          };
-          
-          setSelectedTemplate(customTemplate);
-          setShowTemplateView(true);
+        let templateData;
+        
+        // Use authenticated client if available
+        if (authState.isAuthenticated && octokit) {
+          try {
+            const response = await octokit.request("GET {url}", {
+              url: templateUrl
+            });
+            templateData = response.data;
+          } catch (error) {
+            throw new Error(`Template not found: ${error instanceof Error ? error.message : "Unknown error"}`);
+          }
         } else {
-          setError(`Template for ${filePath} not found. You can create your own.`);
+          const response = await fetch(templateUrl);
+          
+          if (!response.ok) {
+            throw new Error(`Template for ${filePath} not found. You can create your own.`);
+          }
+          
+          templateData = await response.json();
         }
+        
+        const content = atob(templateData.content); // Decode base64 content
+        
+        const customTemplate: FileTemplate = {
+          filename: filePath,
+          description: `${filePath} template from GitHub's OSPO templates`,
+          content: content
+        };
+        
+        setSelectedTemplate(customTemplate);
+        setShowTemplateView(true);
       } catch (error) {
         setError(`Error fetching template: ${error instanceof Error ? error.message : "Unknown error"}`);
       } finally {
@@ -372,10 +443,15 @@ function App() {
         <>
           <Card className="mb-8">
             <CardHeader>
-              <CardTitle>Repository Validation</CardTitle>
-              <CardDescription>
-                Enter a GitHub repository URL to check for required files
-              </CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Repository Validation</CardTitle>
+                  <CardDescription>
+                    Enter a GitHub repository URL to check for required files
+                  </CardDescription>
+                </div>
+                <GitHubAuth />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col space-y-4">
@@ -415,31 +491,81 @@ function App() {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
+                
+                {!authState.isAuthenticated && (
+                  <Alert>
+                    <LockOpen className="h-4 w-4" />
+                    <AlertTitle>Sign in to access more features</AlertTitle>
+                    <AlertDescription>
+                      Sign in with GitHub to validate private repositories and increase API rate limits.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </CardContent>
           </Card>
           
           {validationSummary && (
             <>
-              {/* Description Rating Card */}
-              {descriptionRating && (
-                <Card className="mb-6">
-                  <CardHeader>
-                    <CardTitle className="flex justify-between">
-                      <span>Repository Description</span>
-                      {renderRatingBadge(descriptionRating.rating)}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="p-3 bg-secondary/20 rounded-md">
-                      <p className="font-medium">{descriptionRating.text || "No description provided"}</p>
-                      {descriptionRating.feedback && (
-                        <p className="text-sm text-muted-foreground mt-2">{descriptionRating.feedback}</p>
-                      )}
+              {/* Repository Status Card */}
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="flex justify-between">
+                    <span>Repository Status</span>
+                    {isPrivateRepo ? (
+                      <Badge variant="outline" className="bg-secondary/50">
+                        <LockSimple className="mr-1 h-3 w-3" />
+                        Private
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-secondary/50">
+                        <FolderOpen className="mr-1 h-3 w-3" />
+                        Public
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Description Rating */}
+                    {descriptionRating && (
+                      <div className="p-4 bg-card rounded-md shadow-sm">
+                        <div className="flex justify-between mb-2">
+                          <h3 className="font-medium">Description</h3>
+                          {renderRatingBadge(descriptionRating.rating)}
+                        </div>
+                        <p className="text-sm">{descriptionRating.text || "No description provided"}</p>
+                        {descriptionRating.feedback && (
+                          <p className="text-xs text-muted-foreground mt-2">{descriptionRating.feedback}</p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Compliance Summary */}
+                    <div className="p-4 bg-card rounded-md shadow-sm">
+                      <h3 className="font-medium mb-2">Compliance Summary</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Required files:</span>
+                          <span className={validationSummary.missingRequired > 0 ? "text-destructive font-medium" : "text-accent font-medium"}>
+                            {validationSummary.missingRequired > 0 ? 
+                              `${validationSummary.missingRequired} missing` : 
+                              "All present"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Recommended files:</span>
+                          <span className={validationSummary.missingRecommended > 0 ? "text-amber-500 font-medium" : "text-accent font-medium"}>
+                            {validationSummary.missingRecommended > 0 ? 
+                              `${validationSummary.missingRecommended} missing` : 
+                              "All present"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
+                </CardContent>
+              </Card>
               
               {/* File Validation Results Card */}
               <Card>
@@ -665,6 +791,14 @@ function App() {
         <p>GitHub Repo Wizard – Check your repositories for required open source files and best practices</p>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
