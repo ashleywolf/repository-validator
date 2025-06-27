@@ -20,19 +20,32 @@ export const GitHubAuth: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [canAccessPrivate, setCanAccessPrivate] = useState(false);
 
-  // Determine if we have private repo access
   useEffect(() => {
-    if (accessToken) {
-      // Both real GitHub tokens and our special Spark tokens can access private repos
-      setCanAccessPrivate(
-        accessToken.startsWith('ghp_') || 
-        accessToken.startsWith('ghs_') || 
-        accessToken.startsWith('ghp_spark_')
+    if (authState.isAuthenticated && authState.user) {
+      // When authentication first becomes active, show appropriate toast
+      const hasPrivateAccess = authState.accessToken && (
+        authState.accessToken.startsWith('ghp_') || 
+        authState.accessToken.startsWith('ghs_') || 
+        authState.accessToken.startsWith('ghp_spark_')
       );
-    } else {
-      setCanAccessPrivate(false);
+      
+      // Update the canAccessPrivate state
+      setCanAccessPrivate(hasPrivateAccess);
+      
+      // Show authentication status toast with appropriate access level
+      if (hasPrivateAccess) {
+        toast.success("Authentication Verified", {
+          description: `Welcome ${authState.user.login}! You have access to both private and public repositories. You can now validate any repository you have access to.`,
+          duration: 5000
+        });
+      } else {
+        toast.success("Authentication Verified", {
+          description: `Welcome ${authState.user.login}! You have access to public repositories with increased API rate limits.`,
+          duration: 5000
+        });
+      }
     }
-  }, [accessToken]);
+  }, [authState.isAuthenticated, authState.user]);
 
   // Try to authenticate with Spark user on mount
   useEffect(() => {
@@ -65,7 +78,22 @@ export const GitHubAuth: React.FC = () => {
       const success = await initWithSparkAuth();
       
       if (success) {
-        toast.success("Authenticated with GitHub via Spark");
+        // Check if we have private repo access based on the token
+        const hasPrivateAccess = accessToken && (
+          accessToken.startsWith('ghp_') || 
+          accessToken.startsWith('ghs_') || 
+          accessToken.startsWith('ghp_spark_')
+        );
+        
+        if (hasPrivateAccess) {
+          toast.success("Authenticated with GitHub", {
+            description: "You now have access to private repositories."
+          });
+        } else {
+          toast.success("Authenticated with GitHub", {
+            description: "You can now access public repositories with higher rate limits."
+          });
+        }
       } else {
         // If in the Spark environment but auth failed, use public mode
         if (isSparkEnvironment()) {
@@ -108,9 +136,15 @@ export const GitHubAuth: React.FC = () => {
             <span className="hidden sm:inline">{user.login}</span>
             <span className="flex items-center">
               {canAccessPrivate ? (
-                <LockOpen className="h-3 w-3 text-accent ml-1" title="Private repo access enabled" />
+                <Badge variant="outline" className="text-accent border-accent flex items-center h-5 ml-1 px-1">
+                  <LockOpen className="h-3 w-3 mr-1" />
+                  <span className="text-xs">Private Access</span>
+                </Badge>
               ) : (
-                <Check className="h-3 w-3 text-accent" />
+                <Badge variant="outline" className="flex items-center h-5 ml-1 px-1">
+                  <Check className="h-3 w-3 mr-1" />
+                  <span className="text-xs">Public Only</span>
+                </Badge>
               )}
             </span>
           </Button>
@@ -122,15 +156,15 @@ export const GitHubAuth: React.FC = () => {
             <span>Repository Access:</span>
             <span className="flex items-center text-xs">
               {canAccessPrivate ? (
-                <>
-                  <LockOpen className="h-3 w-3 mr-1 text-accent" />
-                  <span className="text-accent">Public & Private</span>
-                </>
+                <Badge variant="outline" className="text-accent border-accent flex items-center ml-1 px-1">
+                  <LockOpen className="h-3 w-3 mr-1" />
+                  <span>Private & Public</span>
+                </Badge>
               ) : (
-                <>
+                <Badge variant="outline" className="flex items-center ml-1 px-1">
                   <LockSimple className="h-3 w-3 mr-1" />
                   <span>Public Only</span>
-                </>
+                </Badge>
               )}
             </span>
           </DropdownMenuItem>

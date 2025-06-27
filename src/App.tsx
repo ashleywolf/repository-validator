@@ -64,6 +64,21 @@ function AppContent() {
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [descriptionRating, setDescriptionRating] = useState<DescriptionRating | null>(null);
   const [isPrivateRepo, setIsPrivateRepo] = useState(false);
+  const [canAccessPrivate, setCanAccessPrivate] = useState(false);
+  
+  // Determine if user has private repo access based on token type
+  useEffect(() => {
+    if (authState.accessToken) {
+      const token = authState.accessToken;
+      setCanAccessPrivate(
+        token.startsWith('ghp_') || 
+        token.startsWith('ghs_') || 
+        token.startsWith('ghp_spark_')
+      );
+    } else {
+      setCanAccessPrivate(false);
+    }
+  }, [authState.accessToken]);
 
   // Handle direct GitHub authentication
   const handleDirectAuth = useCallback(async () => {
@@ -612,7 +627,7 @@ function AppContent() {
                   <Button 
                     onClick={handleValidate} 
                     disabled={loading || !url.trim()}
-                    className="sm:w-auto w-full mission-badge"
+                    className={`sm:w-auto w-full mission-badge ${canAccessPrivate ? 'bg-accent' : ''}`}
                   >
                     {loading ? (
                       <span className="flex items-center">
@@ -621,7 +636,11 @@ function AppContent() {
                       </span>
                     ) : (
                       <span className="flex items-center">
-                        <MagnifyingGlass className="mr-2" weight="bold" />
+                        {canAccessPrivate ? (
+                          <LockOpen className="mr-2" weight="bold" />
+                        ) : (
+                          <MagnifyingGlass className="mr-2" weight="bold" />
+                        )}
                         Validate Repo
                       </span>
                     )}
@@ -711,20 +730,54 @@ function AppContent() {
                   <CardTitle className="flex justify-between">
                     <span>Repository Overview</span>
                     {isPrivateRepo ? (
-                      <Badge variant="outline" className="bg-secondary/50">
+                      <Badge variant="outline" className="bg-secondary/50 flex items-center">
                         <LockSimple className="mr-1 h-3 w-3" />
-                        Classified
+                        Private Repository
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-secondary/50">
+                      <Badge variant="outline" className="bg-secondary/50 flex items-center">
                         <FolderOpenIcon className="mr-1 h-3 w-3" />
-                        Unclassified
+                        Public Repository
                       </Badge>
                     )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Authentication Status */}
+                    <div className="p-4 bg-card rounded-md shadow-sm">
+                      <div className="flex justify-between mb-2">
+                        <h3 className="font-medium">Authentication Status</h3>
+                        <div>
+                          {authState.isAuthenticated ? (
+                            <Badge className={canAccessPrivate ? "bg-accent text-accent-foreground" : "bg-secondary"}>
+                              {canAccessPrivate ? (
+                                <LockOpen className="mr-1 h-3 w-3" />
+                              ) : (
+                                <LockSimple className="mr-1 h-3 w-3" />
+                              )}
+                              {canAccessPrivate ? "Private Access" : "Public Only"}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              <Warning className="mr-1 h-3 w-3" />
+                              Not Authenticated
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm">
+                        {authState.isAuthenticated 
+                          ? `Authenticated as ${authState.user?.login}${canAccessPrivate ? ' with private repository access' : ' with public repository access'}`
+                          : "Sign in with GitHub to access private repositories and increase API rate limits"}
+                      </p>
+                      {authState.isAuthenticated && !canAccessPrivate && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Note: You can only access public repositories with your current authentication level.
+                        </p>
+                      )}
+                    </div>
+                    
                     {/* Description Rating */}
                     {descriptionRating && (
                       <div className="p-4 bg-card rounded-md shadow-sm">
