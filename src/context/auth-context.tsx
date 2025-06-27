@@ -57,33 +57,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: null
       }));
 
-      const token = await getSparkAuthToken();
-      
-      if (token) {
-        try {
-          const user = await fetchUserInfo(token);
-          setAuthState({
-            isAuthenticated: true,
-            accessToken: token,
-            user,
-            loading: false,
-            error: null
-          });
-          
-          const oktokitInstance = createOctokit(token);
-          setOctokit(oktokitInstance);
-          return true;
-        } catch (error) {
-          console.error("Error initializing Spark auth:", error);
-          setAuthState(prev => ({
-            ...prev,
-            loading: false,
-            error: "Could not authenticate with Spark"
-          }));
-          return false;
+      // Try to get a token via Spark
+      try {
+        const token = await getSparkAuthToken();
+        
+        if (token) {
+          try {
+            const user = await fetchUserInfo(token);
+            setAuthState({
+              isAuthenticated: true,
+              accessToken: token,
+              user,
+              loading: false,
+              error: null
+            });
+            
+            const oktokitInstance = createOctokit(token);
+            setOctokit(oktokitInstance);
+            return true;
+          } catch (error) {
+            console.error("Error initializing Spark auth:", error);
+          }
         }
+      } catch (error) {
+        console.warn("Spark authentication not available:", error);
       }
       
+      // If we get here, either there was no token or fetching user info failed
       setAuthState(prev => ({
         ...prev,
         loading: false
@@ -94,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAuthState(prev => ({
         ...prev,
         loading: false,
-        error: "Error initializing Spark authentication"
+        error: "Error initializing authentication"
       }));
       return false;
     }

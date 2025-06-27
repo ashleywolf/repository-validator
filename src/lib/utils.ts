@@ -132,7 +132,8 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
     });
     
     if (!response.ok) {
-      console.error("SBOM API error:", response.status);
+      console.warn(`SBOM API returned status ${response.status} for ${owner}/${repo}`);
+      // Create a blank result rather than throwing an error
       return {
         mitCount: 0,
         sbomDependenciesCount: 0,
@@ -172,6 +173,7 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
     };
   } catch (error) {
     console.error("Error analyzing SBOM data:", error);
+    // Return an empty result instead of throwing
     return {
       mitCount: 0,
       sbomDependenciesCount: 0,

@@ -16,33 +16,36 @@ import { toast } from "sonner";
 
 export const GitHubAuth: React.FC = () => {
   const { authState, login, logout, initWithSparkAuth } = useAuth();
-  const { isAuthenticated, user, loading } = authState;
+  const { isAuthenticated, user, loading: authLoading } = authState;
+  const [loading, setLoading] = useState(false);
 
   // Try to authenticate with Spark user on mount
   useEffect(() => {
-    if (!isAuthenticated && !loading) {
+    if (!isAuthenticated && !authLoading && !loading) {
       initWithSparkAuth();
     }
-  }, [isAuthenticated, loading, initWithSparkAuth]);
+  }, [isAuthenticated, authLoading, loading, initWithSparkAuth]);
   
   const handleDirectAuth = async () => {
     try {
+      setLoading(true);
       const success = await initWithSparkAuth();
       if (success) {
         toast.success("Authenticated with GitHub via Spark");
       } else {
-        // If Spark auth fails, fall back to OAuth
-        login();
+        // If Spark auth fails, use anonymous mode for public repos
+        toast.info("Using public repository access only");
+        // Don't fall back to OAuth automatically as it may not work in this environment
       }
     } catch (error) {
       console.error("Auth error:", error);
-      toast.error("Authentication failed. Trying GitHub OAuth...");
-      // Fall back to regular OAuth
-      login();
+      toast.error("Authentication failed. Using public access mode.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <Button variant="outline" disabled>
         <span className="animate-pulse">Loading...</span>

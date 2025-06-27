@@ -42,7 +42,7 @@ import {
   StarHalf,
   LinkSimple,
   Folder,
-  FolderOpen,
+  FolderOpen as FolderOpenIcon,
   LockSimple,
   LockOpen
 } from "@phosphor-icons/react";
@@ -537,7 +537,7 @@ function AppContent() {
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="bg-secondary/50">
-                        <Folder className="mr-1 h-3 w-3" />
+                        <FolderOpenIcon className="mr-1 h-3 w-3" />
                         Unclassified
                       </Badge>
                     )}
