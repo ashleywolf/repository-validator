@@ -239,6 +239,9 @@ function AppContent() {
               if (sbomAnalysis) {
                 result.dependencyAnalysis.mitCount = sbomAnalysis.mitCount;
                 result.dependencyAnalysis.sbomDependenciesCount = sbomAnalysis.sbomDependenciesCount;
+                if (sbomAnalysis.licenseBreakdown) {
+                  result.dependencyAnalysis.licenseBreakdown = sbomAnalysis.licenseBreakdown;
+                }
               }
             } catch (error) {
               console.error("Error analyzing package.json:", error);
@@ -682,6 +685,27 @@ function AppContent() {
                                     <span className="font-medium">{result.dependencyAnalysis.dependenciesCount + (result.dependencyAnalysis.devDependenciesCount || 0)}</span>
                                   </div>
                                   
+                                  {/* License breakdown */}
+                                  {result.dependencyAnalysis.licenseBreakdown && 
+                                   Object.keys(result.dependencyAnalysis.licenseBreakdown).length > 0 && (
+                                    <div className="col-span-2 mt-2 pt-2 border-t border-secondary/30">
+                                      <div className="font-medium mb-1">License Breakdown:</div>
+                                      <div className="space-y-1">
+                                        {Object.entries(result.dependencyAnalysis.licenseBreakdown)
+                                          .sort(([, countA], [, countB]) => (countB as number) - (countA as number))
+                                          .map(([license, count], index) => (
+                                            <div key={index} className="flex justify-between">
+                                              <span className={license.toLowerCase().includes('gpl') && !license.toLowerCase().includes('lgpl') ? 'text-amber-700 font-medium' : ''}>
+                                                {license || 'Unknown'}:
+                                              </span>
+                                              <span className="font-medium">{count}</span>
+                                            </div>
+                                          ))
+                                        }
+                                      </div>
+                                    </div>
+                                  )}
+                                  
                                   {/* SBOM dependency data */}
                                   {result.dependencyAnalysis.sbomDependenciesCount !== undefined && (
                                     <>
@@ -693,6 +717,27 @@ function AppContent() {
                                         <div className="flex justify-between col-span-2">
                                           <span>MIT licensed dependencies:</span>
                                           <span className="font-medium">{result.dependencyAnalysis.mitCount}</span>
+                                        </div>
+                                      )}
+                                      
+                                      {/* SBOM License breakdown */}
+                                      {result.dependencyAnalysis.licenseBreakdown && 
+                                       Object.keys(result.dependencyAnalysis.licenseBreakdown).length > 0 && (
+                                        <div className="col-span-2 mt-2 pt-2 border-t border-secondary/30">
+                                          <div className="font-medium mb-1">SBOM License Breakdown:</div>
+                                          <div className="space-y-1">
+                                            {Object.entries(result.dependencyAnalysis.licenseBreakdown)
+                                              .sort(([, countA], [, countB]) => (countB as number) - (countA as number))
+                                              .map(([license, count], index) => (
+                                                <div key={`sbom-${index}`} className="flex justify-between">
+                                                  <span className={license.toLowerCase().includes('gpl') && !license.toLowerCase().includes('lgpl') ? 'text-amber-700 font-medium' : ''}>
+                                                    {license || 'Unknown'}:
+                                                  </span>
+                                                  <span className="font-medium">{count}</span>
+                                                </div>
+                                              ))
+                                            }
+                                          </div>
                                         </div>
                                       )}
                                     </>

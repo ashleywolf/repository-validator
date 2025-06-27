@@ -42,6 +42,7 @@ export type DependencyAnalysis = {
   mitCount?: number; // Count of MIT licensed dependencies from SBOM
   sbomDependenciesCount?: number; // Total count of dependencies from SBOM
   hasCopyleft?: boolean; // Whether any copyleft licenses are present
+  licenseBreakdown?: Record<string, number>; // Map of license names to counts
 }
 
 export type ValidationResult = {
@@ -120,6 +121,7 @@ export function getSbomApiUrl(owner: string, repo: string): string {
 export async function analyzeSbomData(owner: string, repo: string): Promise<{
   mitCount: number;
   sbomDependenciesCount: number;
+  licenseBreakdown?: Record<string, number>;
 }> {
   try {
     const sbomUrl = getSbomApiUrl(owner, repo);
@@ -133,35 +135,47 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
       console.error("SBOM API error:", response.status);
       return {
         mitCount: 0,
-        sbomDependenciesCount: 0
+        sbomDependenciesCount: 0,
+        licenseBreakdown: {}
       };
     }
     
     const sbomData = await response.json();
     
-    // Count dependencies and MIT licenses
+    // Count dependencies and breakdown licenses
     let sbomDependenciesCount = 0;
     let mitCount = 0;
+    const licenseBreakdown: Record<string, number> = {};
     
     // Navigate SBOM structure - may vary based on actual API response
     if (sbomData.sbom && sbomData.sbom.packages) {
       sbomDependenciesCount = sbomData.sbom.packages.length;
       
-      // Count MIT licenses
-      mitCount = sbomData.sbom.packages.filter((pkg: any) => {
-        return pkg.licenseConcluded === "MIT";
-      }).length;
+      // Process all licenses
+      sbomData.sbom.packages.forEach((pkg: any) => {
+        const license = pkg.licenseConcluded || "Unknown";
+        
+        // Count for MIT specifically
+        if (license === "MIT") {
+          mitCount++;
+        }
+        
+        // Add to breakdown
+        licenseBreakdown[license] = (licenseBreakdown[license] || 0) + 1;
+      });
     }
     
     return {
       mitCount,
-      sbomDependenciesCount
+      sbomDependenciesCount,
+      licenseBreakdown
     };
   } catch (error) {
     console.error("Error analyzing SBOM data:", error);
     return {
       mitCount: 0,
-      sbomDependenciesCount: 0
+      sbomDependenciesCount: 0,
+      licenseBreakdown: {}
     };
   }
 }
@@ -233,7 +247,7 @@ export async function checkLicenseFile(fileUrl: string): Promise<LicenseCheck> {
   }
 }
 
-// Analyze dependencies to check for copyleft licenses
+// Analyze dependencies to check for licenses
 export async function analyzeDependencies(fileUrl: string): Promise<DependencyAnalysis> {
   try {
     const response = await fetch(fileUrl);
@@ -247,6 +261,7 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
     const dependencies = content.packages || content.dependencies || {};
     const gplDependencies: string[] = [];
     const agplDependencies: string[] = [];
+    const licenseBreakdown: Record<string, number> = {};
     
     // Count the actual dependencies (excluding the root package)
     const dependencyCount = Object.keys(dependencies).filter(name => name !== '').length;
@@ -255,12 +270,22 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
     Object.entries(dependencies).forEach(([name, info]: [string, any]) => {
       if (name === '') return; // Skip root package
       
+      // Extract license information
       const license = typeof info.license === 'string' 
         ? info.license 
-        : (info.licenses ? info.licenses.join(', ') : '');
+        : (info.licenses ? info.licenses.join(', ') : 'Unknown');
       
+      // Normalize license name
+      let normalizedLicense = license || 'Unknown';
+      
+      // Count licenses for breakdown
+      if (normalizedLicense) {
+        licenseBreakdown[normalizedLicense] = (licenseBreakdown[normalizedLicense] || 0) + 1;
+      }
+      
+      // Track copyleft licenses specifically
       if (license) {
-        if (/GPL-3\.0|GPL3|GNU General Public License v3/i.test(license) && !/LGPL|Lesser/i.test(license)) {
+        if (/GPL-3\.0|GPL3|GNU General Public License v3|GPL-2\.0|GPL2|GNU General Public License v2/i.test(license) && !/LGPL|Lesser/i.test(license)) {
           gplDependencies.push(`${name.replace('node_modules/', '')}: ${license}`);
         }
         if (/AGPL|Affero/i.test(license)) {
@@ -278,7 +303,8 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
       agplCount: agplDependencies.length,
       gplDependencies,
       agplDependencies,
-      hasCopyleft
+      hasCopyleft,
+      licenseBreakdown
     };
   } catch (error) {
     console.error("Error analyzing dependencies:", error);
@@ -288,12 +314,13 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
       agplCount: 0,
       gplDependencies: [],
       agplDependencies: [],
-      hasCopyleft: false
+      hasCopyleft: false,
+      licenseBreakdown: {}
     };
   }
 }
 
-// Rate repository description quality
+// Rate repository description quality using LLM analysis
 export async function rateRepoDescription(owner: string, repo: string): Promise<DescriptionRating> {
   try {
     // Fetch repository information
@@ -318,25 +345,58 @@ export async function rateRepoDescription(owner: string, repo: string): Promise<
       };
     }
     
-    // Simple rating based on description length and content
-    if (description.length < 10) {
+    // Use LLM to analyze the description quality
+    try {
+      const prompt = spark.llmPrompt`
+        Rate the quality of this GitHub repository description: "${description}"
+        
+        Consider:
+        1. Clarity - Does it clearly explain what the repository is for?
+        2. Completeness - Does it cover the key functionality and purpose?
+        3. Conciseness - Is it appropriately detailed without being verbose?
+        
+        Provide:
+        1. A rating of either "great", "good", "poor" (exactly one of these words)
+        2. A brief explanation of why you gave this rating (1-2 sentences)
+        
+        Format your response as JSON with two fields:
+        {
+          "rating": "great|good|poor",
+          "feedback": "explanation here"
+        }
+      `;
+      
+      const analysis = await spark.llm(prompt, "gpt-4o-mini", true);
+      const result = JSON.parse(analysis);
+      
       return {
         text: description,
-        rating: "poor",
-        feedback: "Description is too short. Add more details about what the project does."
+        rating: result.rating as 'great' | 'good' | 'poor',
+        feedback: result.feedback
       };
-    } else if (description.length < 30) {
-      return {
-        text: description,
-        rating: "good",
-        feedback: "Decent description but could be more detailed."
-      };
-    } else {
-      return {
-        text: description,
-        rating: "great",
-        feedback: "Excellent description with good detail."
-      };
+    } catch (error) {
+      console.error("Error using LLM for description analysis:", error);
+      
+      // Fallback to basic length check if LLM fails
+      if (description.length < 10) {
+        return {
+          text: description,
+          rating: "poor",
+          feedback: "Description is too short. Add more details about what the project does."
+        };
+      } else if (description.length < 30) {
+        return {
+          text: description,
+          rating: "good",
+          feedback: "Decent description but could be more detailed."
+        };
+      } else {
+        return {
+          text: description,
+          rating: "great",
+          feedback: "Excellent description with good detail."
+        };
+      }
     }
   } catch (error) {
     console.error("Error rating repository description:", error);
