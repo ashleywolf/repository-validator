@@ -25,38 +25,28 @@ export async function analyzeRepositoryWithLLM(repoUrl: string): Promise<RepoAna
     
     const { owner, repo } = repoInfo;
     
-    // Get basic repository info
+    // Get basic repository info - use one request instead of multiple when possible
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
-    const contentsUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
     
-    // Get repo info and contents
-    const [repoResponse, contentsResponse] = await Promise.all([
-      makeGitHubRequest(apiUrl),
-      makeGitHubRequest(contentsUrl)
-    ]);
+    // Get repo info
+    const repoResponse = await makeGitHubRequest(apiUrl);
     
-    if (!repoResponse.ok || !contentsResponse.ok) {
-      throw new Error(`Failed to fetch repository data: ${repoResponse.status} ${contentsResponse.status}`);
+    if (!repoResponse.ok) {
+      throw new Error(`Failed to fetch repository data: ${repoResponse.status}`);
     }
     
     const repoData = await repoResponse.json();
-    const contentsData = await contentsResponse.json();
     
     // Prepare data for LLM analysis
     const description = repoData.description || "";
     const topics = repoData.topics || [];
-    const fileList = contentsData
-      .map((item: any) => `${item.name} (${item.type})`)
-      .join(", ");
     
-    // Get README content if available
+    // Only get README content rather than all contents to reduce API requests
+    const readmeUrl = `https://api.github.com/repos/${owner}/${repo}/contents/README.md`;
     let readmeContent = "";
-    const readmeFile = contentsData.find((file: any) => 
-      file.name.toLowerCase().includes('readme')
-    );
     
-    if (readmeFile) {
-      const readmeResponse = await makeGitHubRequest(readmeFile.url);
+    try {
+      const readmeResponse = await makeGitHubRequest(readmeUrl);
       if (readmeResponse.ok) {
         const readmeData = await readmeResponse.json();
         if (readmeData.content) {
@@ -67,6 +57,9 @@ export async function analyzeRepositoryWithLLM(repoUrl: string): Promise<RepoAna
           }
         }
       }
+    } catch (error) {
+      console.warn("Could not fetch README content:", error);
+      // Continue without README
     }
     
     // Use LLM to analyze the repository
@@ -76,7 +69,6 @@ export async function analyzeRepositoryWithLLM(repoUrl: string): Promise<RepoAna
       Repository: ${owner}/${repo}
       Description: ${description}
       Topics: ${topics.join(", ")}
-      Files in root directory: ${fileList}
       
       README content:
       ${readmeContent || "No README content available"}
@@ -96,7 +88,7 @@ export async function analyzeRepositoryWithLLM(repoUrl: string): Promise<RepoAna
       }
     `;
     
-    const analysisJson = await spark.llm(prompt, "gpt-4o", true);
+    const analysisJson = await spark.llm(prompt, "gpt-4o-mini", true);
     return JSON.parse(analysisJson);
     
   } catch (error) {
