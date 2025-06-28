@@ -25,7 +25,8 @@ import {
   getCurrentRateLimit,
   RateLimitInfo,
   checkRateLimits,
-  clearGitHubRequestCache
+  clearGitHubRequestCache,
+  isRateLimitError
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -125,25 +126,20 @@ function AppContent() {
           setRateLimitInfo(getCurrentRateLimit());
         }
         
-        // Show warning if rates are getting low
-        if (!rateLimitCheck.ok) {
-          if (rateLimitCheck.remaining <= 5) {
-            const message = rateLimitCheck.isAuthenticated 
-              ? `You're close to the GitHub API rate limit (${rateLimitCheck.remaining} requests remaining)`
-              : `GitHub API rate limit is low (${rateLimitCheck.remaining}/60 requests remaining)`;
-              
-            toast.warning(message, {
-              description: `Rate limits reset at ${rateLimitCheck.resetTime}. ${!rateLimitCheck.isAuthenticated ? 'Consider adding a GitHub token for higher limits.' : ''}`,
-              duration: 6000
-            });
-          }
+        // Show warning if rates are getting low, but only if we have accurate rate info
+        if (!rateLimitCheck.ok && rateLimitCheck.remaining < 15) {
+          const message = rateLimitCheck.isAuthenticated 
+            ? `You're close to the GitHub API rate limit (${rateLimitCheck.remaining} requests remaining)`
+            : `GitHub API rate limit is low (${rateLimitCheck.remaining}/60 requests remaining)`;
+            
+          toast.warning(message, {
+            description: `Rate limits reset at ${rateLimitCheck.resetTime}. ${!rateLimitCheck.isAuthenticated ? 'Consider adding a GitHub token for higher limits.' : ''}`,
+            duration: 6000
+          });
         }
       } catch (error) {
-        // Only throw if this is a rate limit error
-        if (error instanceof Error && error.message.includes('rate limit')) {
-          throw error;
-        }
-        // Otherwise continue - this check is optional
+        // If rate limit check fails, don't block the main validation
+        // This improves reliability for public repos even if rate check fails
         console.warn("Rate limit check failed, continuing anyway:", error);
       }
       
@@ -158,7 +154,13 @@ function AppContent() {
           if (response.status === 404) {
             throw new Error("Repository not found. The URL may be incorrect.");
           } else if (response.status === 403) {
-            throw new Error(`GitHub API rate limit exceeded. Please try again later.`);
+            // Check response body to determine if it's really a rate limit issue
+            const responseText = await response.text();
+            if (responseText.toLowerCase().includes("rate limit exceeded")) {
+              throw new Error(`GitHub API rate limit exceeded. Please try again later.`);
+            } else {
+              throw new Error(`GitHub API error: Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.`);
+            }
           } else if (response.status === 401) {
             throw new Error(`Authentication required. This is likely a private repository.`);
           } else {
@@ -170,7 +172,7 @@ function AppContent() {
         
         // Show a toast notification about rate limits if we're getting low
         const rateLimit = getCurrentRateLimit();
-        if (rateLimit && rateLimit.remaining < 20) {
+        if (rateLimit && rateLimit.remaining !== undefined && rateLimit.remaining < 20) {
           const isAuthenticated = !!localStorage.getItem("github_access_token");
           const resetTime = rateLimit.reset.toLocaleTimeString();
           
@@ -397,8 +399,8 @@ function AppContent() {
       // Check if we should do additional checks based on rate limits
       const rateLimitCheck = await checkRateLimits();
       
-      // If we're close to rate limits, warn the user and skip detailed checks
-      if (!rateLimitCheck.ok && rateLimitCheck.remaining < 10) {
+      // If we have accurate rate limit info and we're close to limits, warn and skip detailed checks
+      if (!rateLimitCheck.ok && rateLimitCheck.remaining !== undefined && rateLimitCheck.remaining < 10) {
         toast.warning(`Limiting detailed checks due to API rate limits (${rateLimitCheck.remaining} remaining)`, {
           description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${rateLimitCheck.resetTime}.`,
           duration: 8000
@@ -414,7 +416,7 @@ function AppContent() {
             
             // Check rate limits again before making additional requests
             const secondRateLimitCheck = await checkRateLimits();
-            if (!secondRateLimitCheck.ok && secondRateLimitCheck.remaining < 10) {
+            if (!secondRateLimitCheck.ok && secondRateLimitCheck.remaining !== undefined && secondRateLimitCheck.remaining < 10) {
               toast.warning(`Limiting additional checks due to API rate limits (${secondRateLimitCheck.remaining} remaining)`, {
                 description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${secondRateLimitCheck.resetTime}.`
               });
@@ -533,7 +535,7 @@ function AppContent() {
             })());
             
             // Internal references check (most API intensive, do last)
-            if (secondRateLimitCheck.remaining > 15) {
+            if (secondRateLimitCheck.remaining === undefined || secondRateLimitCheck.remaining > 15) {
               checks.push((async () => {
                 try {
                   const internalRefsCheck = await scanForInternalReferences(owner, repo);
@@ -622,7 +624,17 @@ function AppContent() {
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
           errorMessage = "Authentication error (401). This repository may be private or doesn't exist.";
-        } else if (errorMessage.includes("GitHub API error: 403") || errorMessage.includes("rate limit exceeded")) {
+        } else if (errorMessage.includes("GitHub API error: 403")) {
+          if (errorMessage.includes("rate limit exceeded")) {
+            // Enhanced rate limit error message
+            const resetTime = getCurrentRateLimit()?.reset 
+              ? getCurrentRateLimit()?.reset.toLocaleTimeString() 
+              : 'an hour';
+            errorMessage = `Rate limit exceeded. GitHub limits API requests to 60 per hour for unauthenticated users. Limit resets at approximately ${resetTime}.`;
+          } else {
+            errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
+          }
+        } else if (errorMessage.includes("rate limit exceeded")) {
           // Enhanced rate limit error message
           const resetTime = getCurrentRateLimit()?.reset 
             ? getCurrentRateLimit()?.reset.toLocaleTimeString() 
@@ -766,23 +778,22 @@ function AppContent() {
                     Enter a GitHub repository URL to begin validation
                   </CardDescription>
                 </div>
-                {rateLimitInfo && (
-                  <div className="flex items-center gap-2">
-                    {localStorage.getItem("github_access_token") && (
-                      <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30">
-                        <Key className="mr-1 h-3 w-3" />
-                        Authenticated
-                      </Badge>
-                    )}
-                    {rateLimitInfo && (
-                      <Badge 
-                        variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
-                        className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
-                      >
-                        <Gauge className="mr-1 h-3 w-3" />
-                        {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls
-                        {rateLimitInfo.remaining < 20 && (
-                          <span className="ml-1">
+                <div className="flex items-center gap-2">
+                  {localStorage.getItem("github_access_token") && (
+                    <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30">
+                      <Key className="mr-1 h-3 w-3" />
+                      Authenticated
+                    </Badge>
+                  )}
+                  {rateLimitInfo && rateLimitInfo.remaining !== undefined && (
+                    <Badge 
+                      variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
+                      className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
+                    >
+                      <Gauge className="mr-1 h-3 w-3" />
+                      {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls
+                      {rateLimitInfo.remaining < 20 && (
+                        <span className="ml-1">
                             (resets {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})
                           </span>
                         )}
@@ -860,12 +871,12 @@ function AppContent() {
                     </div>
                   )}
                   
-                  {rateLimitInfo && (
+                  {rateLimitInfo && rateLimitInfo.remaining !== undefined && (
                     <div className="mt-1 pt-1 border-t border-border/30 flex justify-between">
                       <span>API Rate Limit Status:</span>
                       <span className={`font-medium ${rateLimitInfo.remaining < 10 ? 'text-amber-500' : rateLimitInfo.remaining < 5 ? 'text-destructive' : ''}`}>
                         {rateLimitInfo.remaining}/{rateLimitInfo.limit} requests remaining
-                        {rateLimitInfo.remaining < 15 && (
+                        {rateLimitInfo.remaining < 15 && rateLimitInfo.reset && (
                           <span className="ml-1">
                             (resets at {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})
                           </span>
