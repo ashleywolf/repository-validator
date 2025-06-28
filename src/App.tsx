@@ -1,26 +1,29 @@
 import React, { useState } from "react";
-import { isValidGitHubUrl, parseGitHubUrl } from "./lib/utils";
+import { isValidGitHubUrl } from "./lib/utils";
+import { validateRepository, RepoData } from "./lib/repo-services";
 import { ThemeProvider } from "./context/theme-context";
 import { ThemeToggle } from "./components/theme-toggle";
-import { OctocatWizard } from "./components/octocat";
+import { MissionOctocat } from "./components/repo-components";
+import { ValidationResults } from "./components/validation-results";
+import { Spinner } from "./components/spinner";
 import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { GithubLogo, MagnifyingGlass, X, LinkSimple } from "@phosphor-icons/react";
+import { GithubLogo, MagnifyingGlass, X } from "@phosphor-icons/react";
 
 function AppContent() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string; url: string } | null>(null);
+  const [repoData, setRepoData] = useState<RepoData | null>(null);
 
-  // Handle URL validation and parsing
-  const handleValidate = () => {
+  // Handle repository validation
+  const handleValidate = async () => {
     // Reset states
     setError(null);
-    setRepoInfo(null);
+    setRepoData(null);
     
     // Validate URL format
     if (!isValidGitHubUrl(url)) {
@@ -31,25 +34,20 @@ function AppContent() {
     setLoading(true);
     
     try {
-      // Parse GitHub URL
-      const parsedRepoInfo = parseGitHubUrl(url);
-      if (!parsedRepoInfo) {
-        throw new Error("Invalid GitHub URL format");
+      // Validate repository
+      const data = await validateRepository(url);
+      
+      if (!data) {
+        throw new Error("Failed to validate repository. Please check the URL and try again.");
       }
       
-      const { owner, repo } = parsedRepoInfo;
-      
-      // Set repository info
-      setRepoInfo({
-        owner,
-        repo,
-        url: `https://github.com/${owner}/${repo}`
-      });
+      // Set repository data
+      setRepoData(data);
       
       // Show success toast
-      toast.success("Repository URL parsed successfully");
+      toast.success("Repository validation complete!");
     } catch (err) {
-      console.error("URL parsing error:", err);
+      console.error("Repository validation error:", err);
       setError(err instanceof Error ? err.message : "An unknown error occurred");
     } finally {
       setLoading(false);
@@ -63,12 +61,13 @@ function AppContent() {
           <div className="absolute right-4 top-4">
             <ThemeToggle />
           </div>
-          <OctocatWizard size={140} className="mb-4" />
-          <h1 className="text-3xl font-bold mission-text py-2">GitHub Repo Explorer</h1>
-          <h2 className="text-xl text-muted-foreground">Simple Repository URL Tool</h2>
+          <MissionOctocat size={140} className="mb-4" />
+          <h1 className="text-3xl font-bold mission-text py-2">GitHub Open Source Release Checklist</h1>
+          <h2 className="text-xl text-muted-foreground">Mission RepOSSible</h2>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
-          A streamlined tool to quickly work with GitHub repository URLs.
+          Validate your GitHub repository for open source readiness and compliance.
+          We'll check for required files and provide template-based solutions.
         </p>
       </header>
       
@@ -76,7 +75,7 @@ function AppContent() {
         <CardHeader>
           <CardTitle>Repository URL</CardTitle>
           <CardDescription>
-            Enter a GitHub repository URL to explore
+            Enter a GitHub repository URL to validate open source readiness
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -98,13 +97,13 @@ function AppContent() {
               >
                 {loading ? (
                   <span className="flex items-center">
-                    <span className="animate-spin mr-2">⏳</span>
-                    Processing...
+                    <Spinner className="mr-2 h-4 w-4 animate-spin" />
+                    Validating...
                   </span>
                 ) : (
                   <span className="flex items-center">
                     <MagnifyingGlass className="mr-2" weight="bold" />
-                    Parse URL
+                    Validate Repository
                   </span>
                 )}
               </Button>
@@ -121,67 +120,10 @@ function AppContent() {
         </CardContent>
       </Card>
       
-      {repoInfo && (
-        <Card className="mission-card spy-glow">
-          <CardHeader>
-            <CardTitle>Repository Information</CardTitle>
-            <CardDescription>
-              Parsed details for the provided GitHub URL
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 bg-card rounded-md shadow-sm">
-                <h3 className="font-medium mb-2">Repository Details</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Owner:</span>
-                    <span className="font-medium">{repoInfo.owner}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Repository:</span>
-                    <span className="font-medium">{repoInfo.repo}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-between border-t pt-4">
-            <a 
-              href={repoInfo.url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-primary text-sm hover:underline flex items-center"
-            >
-              <GithubLogo className="mr-1" size={16} />
-              View Repository
-            </a>
-            <div className="flex space-x-2">
-              <a 
-                href={`${repoInfo.url}/issues`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary text-sm hover:underline flex items-center"
-              >
-                <LinkSimple className="mr-1" size={16} />
-                Issues
-              </a>
-              <a 
-                href={`${repoInfo.url}/pulls`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary text-sm hover:underline flex items-center"
-              >
-                <LinkSimple className="mr-1" size={16} />
-                Pull Requests
-              </a>
-            </div>
-          </CardFooter>
-        </Card>
-      )}
+      {repoData && <ValidationResults repoData={repoData} />}
       
       <footer className="mt-16 text-center text-sm text-muted-foreground">
-        <p>GitHub Repo Explorer – A simple tool for GitHub repository URLs</p>
+        <p>GitHub Open Source Release Checklist – Mission RepOSSible</p>
         <div className="flex justify-center mt-2">
           <a 
             href="https://github.com" 
