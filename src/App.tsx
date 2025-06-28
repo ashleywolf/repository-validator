@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState } from "react";
 import { 
   FileRequirement,
   ValidationSummary,
@@ -13,30 +13,22 @@ import {
   analyzeSbomData,
   rateRepoDescription,
   DescriptionRating,
-  addAuthHeaders,
   makeGitHubRequest,
   exportSbomData,
   scanForInternalReferences
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
-import { GitHubAuth } from "./components/github-auth";
-import { AuthProvider, useAuth } from "./context/auth-context";
 import { ThemeProvider } from "./context/theme-context";
 import { ThemeToggle } from "./components/theme-toggle";
 import { OctocatWizard } from "./components/octocat";
 import { CreatePRButton } from "./components/create-pr-button";
-import { AuthExplainer } from "./components/auth-explainer";
-import { PatInput } from "./components/pat-input";
-import { AuthStatusBanner } from "./components/auth-status-banner";
-import { AuthDialog } from "./components/auth-dialog";
 import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   GithubLogo, 
@@ -44,21 +36,14 @@ import {
   Check, 
   X, 
   Warning, 
-  FilePlus,
-  FileText,
-  File,
   Package,
   Star,
   StarHalf,
   LinkSimple,
-  Folder,
-  FolderOpen as FolderOpenIcon,
-  LockSimple,
-  LockOpen
+  FolderOpen as FolderOpenIcon
 } from "@phosphor-icons/react";
 
 function AppContent() {
-  const { authState, octokit, login, initWithSparkAuth } = useAuth();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,52 +52,7 @@ function AppContent() {
   const [selectedTemplate, setSelectedTemplate] = useState<FileTemplate | null>(null);
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [descriptionRating, setDescriptionRating] = useState<DescriptionRating | null>(null);
-  const [isPrivateRepo, setIsPrivateRepo] = useState(false);
-  const [canAccessPrivate, setCanAccessPrivate] = useState(false);
   
-  // Determine if user has private repo access based on token type
-  useEffect(() => {
-    if (authState.accessToken) {
-      const token = authState.accessToken;
-      setCanAccessPrivate(
-        token.startsWith('ghp_') || 
-        token.startsWith('ghs_') || 
-        token.startsWith('ghp_spark_')
-      );
-    } else {
-      setCanAccessPrivate(false);
-    }
-  }, [authState.accessToken]);
-
-  // Handle direct GitHub authentication
-  const handleDirectAuth = useCallback(async () => {
-    try {
-      setLoading(true);
-      // Try to use Spark authentication first
-      const success = await initWithSparkAuth();
-      
-      if (success) {
-        toast.success("Authenticated with GitHub via Spark");
-      } else {
-        // If in the Spark environment but auth failed, use public mode
-        if (typeof window !== 'undefined' && typeof window.spark !== 'undefined') {
-          toast.info("Using public repository access only");
-        } else {
-          // In regular web environment, initiate OAuth flow
-          login();
-        }
-      }
-    } catch (error) {
-      console.error("Auth error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      toast.error("Authentication failed", {
-        description: `Error details: ${errorMessage}`
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [initWithSparkAuth, login]);
-
   // Handle URL validation and repo scanning
   const handleValidate = async () => {
     // Reset states
@@ -121,7 +61,6 @@ function AppContent() {
     setSelectedTemplate(null);
     setShowTemplateView(false);
     setDescriptionRating(null);
-    setIsPrivateRepo(false);
     
     // Validate URL format
     if (!isValidGitHubUrl(url)) {
@@ -144,58 +83,25 @@ function AppContent() {
       const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
       
       let repoContents;
-      let isPrivate = false;
       
-      // Check if we should use authenticated API call
-      if (authState.isAuthenticated && octokit) {
-        try {
-          // Get repository info first to check if it's private
-          const repoInfoResponse = await octokit.request("GET /repos/{owner}/{repo}", {
-            owner,
-            repo
-          });
-          
-          isPrivate = repoInfoResponse.data.private;
-          setIsPrivateRepo(isPrivate);
-          
-          // Fetch repository contents using authenticated client
-          const response = await octokit.request("GET /repos/{owner}/{repo}/contents", {
-            owner,
-            repo
-          });
-          
-          repoContents = response.data;
-        } catch (error: any) {
-          console.error("Error fetching with authentication:", error);
-          
-          if (error.status === 404) {
-            throw new Error("Repository not found or you don't have access to it");
+      // Use the makeGitHubRequest helper with retries and auth handling
+      try {
+        const response = await makeGitHubRequest(apiUrl);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Repository not found or is private.");
+          } else if (response.status === 403) {
+            throw new Error("API rate limit exceeded.");
           } else {
-            throw new Error(`GitHub API error: ${error.status}`);
+            throw new Error(`GitHub API error: ${response.status}`);
           }
         }
-      } else {
-        // Use the makeGitHubRequest helper with retries and auth handling
-        try {
-          const response = await makeGitHubRequest(apiUrl);
-          
-          if (!response.ok) {
-            if (response.status === 404) {
-              throw new Error("Repository not found or is private. Please sign in with GitHub to access private repositories.");
-            } else if (response.status === 403) {
-              throw new Error("API rate limit exceeded. Please sign in with GitHub to increase your rate limit.");
-            } else if (response.status === 401) {
-              throw new Error("Authentication required for this repository. Please sign in with a GitHub Personal Access Token that has access to this repository.");
-            } else {
-              throw new Error(`GitHub API error: ${response.status}`);
-            }
-          }
-          
-          repoContents = await response.json();
-        } catch (error) {
-          console.error("Error fetching repository contents:", error);
-          throw error;
-        }
+        
+        repoContents = await response.json();
+      } catch (error) {
+        console.error("Error fetching repository contents:", error);
+        throw error;
       }
       
       // Transform API response to our RepoFile format
@@ -306,25 +212,12 @@ function AppContent() {
             
             let orgContents;
             
-            // Use authenticated client if available
-            if (authState.isAuthenticated && octokit) {
-              try {
-                const orgResponse = await octokit.request("GET /repos/{owner}/.github/contents", {
-                  owner
-                });
-                orgContents = orgResponse.data;
-              } catch (error) {
-                // Organization .github repo might not exist or be inaccessible
-                orgContents = [];
-              }
-            } else {
-              try {
-                const response = await makeGitHubRequest(orgDotGithubUrl);
-                orgContents = response.ok ? await response.json() : [];
-              } catch (error) {
-                console.warn("Error checking organization .github repo:", error);
-                orgContents = [];
-              }
+            try {
+              const response = await makeGitHubRequest(orgDotGithubUrl);
+              orgContents = response.ok ? await response.json() : [];
+            } catch (error) {
+              console.warn("Error checking organization .github repo:", error);
+              orgContents = [];
             }
             
             const fileExistsInOrg = orgContents.some((item: any) => 
@@ -442,26 +335,9 @@ function AppContent() {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
-          errorMessage = "Authentication required. This is likely a private repository or one protected by SSO/SAML that requires appropriate authentication.";
-          
-          // Don't show toast for this case, we'll provide clearer guidance in the alert
+          errorMessage = "Authentication required. This is likely a private repository.";
         } else if (errorMessage.includes("GitHub API error: 403")) {
           errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
-          
-          // Only show rate limit exceeded toast when not authenticated
-          if (!authState.isAuthenticated) {
-            toast.error("GitHub API rate limit exceeded", {
-              description: "Sign in with GitHub to increase your rate limits and continue using the application.",
-              action: {
-                label: "Sign In",
-                onClick: () => {
-                  if (typeof handleDirectAuth === 'function') {
-                    handleDirectAuth();
-                  }
-                },
-              },
-            });
-          }
         } else if (errorMessage.includes("GitHub API error: 404")) {
           errorMessage = "Repository not found (404). Please check that the URL is correct and the repository exists.";
         } else if (errorMessage.includes("GitHub API error: 500")) {
@@ -488,43 +364,28 @@ function AppContent() {
         setLoading(true);
         const templateUrl = getTemplateApiUrl(filePath);
         
-        let templateData;
-        
-        // Use authenticated client if available
-        if (authState.isAuthenticated && octokit) {
-          try {
-            const response = await octokit.request("GET {url}", {
-              url: templateUrl
-            });
-            templateData = response.data;
-          } catch (error) {
-            throw new Error(`Template not found: ${error instanceof Error ? error.message : "Unknown error"}`);
+        try {
+          const response = await makeGitHubRequest(templateUrl);
+          
+          if (!response.ok) {
+            throw new Error(`Template for ${filePath} not found. You can create your own.`);
           }
-        } else {
-          try {
-            const response = await makeGitHubRequest(templateUrl);
-            
-            if (!response.ok) {
-              throw new Error(`Template for ${filePath} not found. You can create your own.`);
-            }
-            
-            templateData = await response.json();
-          } catch (error) {
-            console.error("Error fetching template:", error);
-            throw error;
-          }
+          
+          const templateData = await response.json();
+          const content = atob(templateData.content); // Decode base64 content
+          
+          const customTemplate: FileTemplate = {
+            filename: filePath,
+            description: `${filePath} template from GitHub's OSPO templates`,
+            content: content
+          };
+          
+          setSelectedTemplate(customTemplate);
+          setShowTemplateView(true);
+        } catch (error) {
+          console.error("Error fetching template:", error);
+          throw error;
         }
-        
-        const content = atob(templateData.content); // Decode base64 content
-        
-        const customTemplate: FileTemplate = {
-          filename: filePath,
-          description: `${filePath} template from GitHub's OSPO templates`,
-          content: content
-        };
-        
-        setSelectedTemplate(customTemplate);
-        setShowTemplateView(true);
       } catch (error) {
         setError(`Error fetching template: ${error instanceof Error ? error.message : "Unknown error"}`);
       } finally {
@@ -601,12 +462,9 @@ function AppContent() {
                     Enter a GitHub repository URL to begin your mission
                   </CardDescription>
                 </div>
-                <GitHubAuth />
               </div>
             </CardHeader>
             <CardContent>
-              <AuthStatusBanner />
-              
               <div className="flex flex-col space-y-4">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex-1">
@@ -621,7 +479,7 @@ function AppContent() {
                   <Button 
                     onClick={handleValidate} 
                     disabled={loading || !url.trim()}
-                    className={`sm:w-auto w-full mission-badge ${canAccessPrivate ? 'bg-accent' : ''}`}
+                    className="sm:w-auto w-full mission-badge"
                   >
                     {loading ? (
                       <span className="flex items-center">
@@ -630,11 +488,7 @@ function AppContent() {
                       </span>
                     ) : (
                       <span className="flex items-center">
-                        {canAccessPrivate ? (
-                          <LockOpen className="mr-2" weight="bold" />
-                        ) : (
-                          <MagnifyingGlass className="mr-2" weight="bold" />
-                        )}
+                        <MagnifyingGlass className="mr-2" weight="bold" />
                         Validate Repo
                       </span>
                     )}
@@ -645,22 +499,8 @@ function AppContent() {
                 <div className="flex justify-between items-center text-xs text-muted-foreground bg-secondary/30 p-2 rounded">
                   <p className="flex items-center">
                     <Warning className="h-3 w-3 mr-1" />
-                    GitHub API has rate limits. Unauthenticated requests are limited to 60/hour.
+                    GitHub API has rate limits. Public repositories are limited to 60 requests per hour.
                   </p>
-                  <AuthDialog />
-                </div>
-                
-                {/* PAT Input for SSO/SAML protected repositories */}
-                <div className="text-xs text-muted-foreground bg-secondary/30 p-2 rounded mt-2">
-                  <details className="cursor-pointer">
-                    <summary className="flex items-center font-medium">
-                      <LockSimple className="h-3 w-3 mr-1" />
-                      Using a personal access token for SSO/SAML repositories
-                    </summary>
-                    <div className="mt-2 pl-4">
-                      <PatInput />
-                    </div>
-                  </details>
                 </div>
                 
                 {error && (
@@ -669,33 +509,16 @@ function AppContent() {
                     <AlertTitle>Repository Access Error</AlertTitle>
                     <AlertDescription>
                       {error}
-                      {error.includes("Access forbidden (403)") && (
+                      {error.includes("API rate limit exceeded") && (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <p><strong>Rate limit reached:</strong> Sign in to increase your API rate limit.</p>
-                          <AuthDialog />
+                          <p>GitHub limits unauthenticated requests to 60 per hour. Please try again later.</p>
                         </div>
                       )}
-                      {(error.includes("Authentication failed") || 
-                        error.includes("Authentication required") || 
-                        error.includes("private repository")) && (
+                      {error.includes("Repository not found") && (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <p><strong>Access denied:</strong> Use the appropriate authentication method.</p>
-                          <AuthDialog />
+                          <p>Make sure the repository exists and is public.</p>
                         </div>
                       )}
-                    </AlertDescription>
-                  </Alert>
-                )}
-                
-                {!authState.isAuthenticated && (
-                  <Alert className="bg-secondary/20 mt-4">
-                    <LockOpen className="h-4 w-4" />
-                    <AlertTitle>Authentication Required</AlertTitle>
-                    <AlertDescription className="flex items-center justify-between">
-                      <div>
-                        <p className="mb-2">Sign in with GitHub to access private repositories and increase API rate limits.</p>
-                      </div>
-                      <AuthDialog />
                     </AlertDescription>
                   </Alert>
                 )}
@@ -710,55 +533,14 @@ function AppContent() {
                 <CardHeader>
                   <CardTitle className="flex justify-between">
                     <span>Repository Overview</span>
-                    {isPrivateRepo ? (
-                      <Badge variant="outline" className="bg-secondary/50 flex items-center">
-                        <LockSimple className="mr-1 h-3 w-3" />
-                        Private Repository
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-secondary/50 flex items-center">
-                        <FolderOpenIcon className="mr-1 h-3 w-3" />
-                        Public Repository
-                      </Badge>
-                    )}
+                    <Badge variant="outline" className="bg-secondary/50 flex items-center">
+                      <FolderOpenIcon className="mr-1 h-3 w-3" />
+                      Public Repository
+                    </Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Authentication Status */}
-                    <div className="p-4 bg-card rounded-md shadow-sm">
-                      <div className="flex justify-between mb-2">
-                        <h3 className="font-medium">Authentication Status</h3>
-                        <div>
-                          {authState.isAuthenticated ? (
-                            <Badge className={canAccessPrivate ? "bg-accent text-accent-foreground" : "bg-secondary"}>
-                              {canAccessPrivate ? (
-                                <LockOpen className="mr-1 h-3 w-3" />
-                              ) : (
-                                <LockSimple className="mr-1 h-3 w-3" />
-                              )}
-                              {canAccessPrivate ? "Private Access" : "Public Only"}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-muted-foreground">
-                              <Warning className="mr-1 h-3 w-3" />
-                              Not Authenticated
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-sm">
-                        {authState.isAuthenticated 
-                          ? `Authenticated as ${authState.user?.login}${canAccessPrivate ? ' with private repository access' : ' with public repository access'}`
-                          : "Sign in with GitHub to access private repositories and increase API rate limits"}
-                      </p>
-                      {authState.isAuthenticated && !canAccessPrivate && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Note: You can only access public repositories with your current authentication level.
-                        </p>
-                      )}
-                    </div>
-                    
                     {/* Description Rating */}
                     {descriptionRating && (
                       <div className="p-4 bg-card rounded-md shadow-sm">
@@ -1148,10 +930,8 @@ git push -f origin main
 function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <AppContent />
-        <Toaster position="top-right" />
-      </AuthProvider>
+      <AppContent />
+      <Toaster position="top-right" />
     </ThemeProvider>
   );
 }
