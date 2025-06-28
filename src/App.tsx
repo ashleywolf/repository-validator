@@ -24,7 +24,8 @@ import {
   OwnershipProperty,
   getCurrentRateLimit,
   RateLimitInfo,
-  checkRateLimits
+  checkRateLimits,
+  clearGitHubRequestCache
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -90,6 +91,9 @@ function AppContent() {
     setShowTemplateView(false);
     setDescriptionRating(null);
     
+    // Clear any cached data when validating a new repo
+    clearGitHubRequestCache();
+    
     // Validate URL format
     if (!isValidGitHubUrl(url)) {
       setError("Please enter a valid GitHub repository URL");
@@ -117,8 +121,8 @@ function AppContent() {
         const rateLimitCheck = await checkRateLimits();
         
         // Update UI with rate limit info
-        if (currentRateLimit) {
-          setRateLimitInfo(currentRateLimit);
+        if (getCurrentRateLimit()) {
+          setRateLimitInfo(getCurrentRateLimit());
         }
         
         // Show warning if rates are getting low
@@ -143,7 +147,7 @@ function AppContent() {
         console.warn("Rate limit check failed, continuing anyway:", error);
       }
       
-      // Use the makeGitHubRequest helper with retries and auth handling
+      // Use the makeGitHubRequest helper with retries, auth handling and caching
       try {
         const response = await makeGitHubRequest(apiUrl);
         
@@ -390,22 +394,193 @@ function AppContent() {
         repo
       });
       
-      // Progressive loading approach - perform these intensive checks after displaying initial results
-      setTimeout(async () => {
-        try {
-          // Show a toast notification about progressive loading
-          toast.info("Loading additional repository data...", {
-            description: "We're gathering more information about the repository. This may take a moment."
-          });
-          
-          // Check rate limits again before making additional requests
-          const rateLimitCheck = await checkRateLimits();
-          if (!rateLimitCheck.ok && rateLimitCheck.remaining < 10) {
-            toast.warning(`Limiting additional checks due to API rate limits (${rateLimitCheck.remaining} remaining)`, {
-              description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${rateLimitCheck.resetTime}.`
+      // Check if we should do additional checks based on rate limits
+      const rateLimitCheck = await checkRateLimits();
+      
+      // If we're close to rate limits, warn the user and skip detailed checks
+      if (!rateLimitCheck.ok && rateLimitCheck.remaining < 10) {
+        toast.warning(`Limiting detailed checks due to API rate limits (${rateLimitCheck.remaining} remaining)`, {
+          description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${rateLimitCheck.resetTime}.`,
+          duration: 8000
+        });
+      } else {
+        // Progressive loading approach for additional checks
+        setTimeout(async () => {
+          try {
+            // Show a toast notification about progressive loading
+            toast.info("Loading additional repository data...", {
+              description: "We're gathering more information about the repository. This may take a moment."
             });
             
-            // Only update the validation summary with what we have already
+            // Check rate limits again before making additional requests
+            const secondRateLimitCheck = await checkRateLimits();
+            if (!secondRateLimitCheck.ok && secondRateLimitCheck.remaining < 10) {
+              toast.warning(`Limiting additional checks due to API rate limits (${secondRateLimitCheck.remaining} remaining)`, {
+                description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${secondRateLimitCheck.resetTime}.`
+              });
+              
+              // Skip the additional API-heavy checks
+              return;
+            }
+            
+            // Perform these checks in parallel to speed up the process
+            const checks = [];
+            
+            // Security features check
+            checks.push((async () => {
+              try {
+                const securityFeaturesCheck = await checkSecurityFeatures(owner, repo);
+                
+                // Determine status based on enabled features
+                const allFeaturesEnabled = 
+                  securityFeaturesCheck.secretScanningEnabled && 
+                  securityFeaturesCheck.dependabotSecurityUpdatesEnabled && 
+                  securityFeaturesCheck.codeqlEnabled;
+                  
+                const someFeaturesEnabled = 
+                  securityFeaturesCheck.secretScanningEnabled || 
+                  securityFeaturesCheck.dependabotSecurityUpdatesEnabled || 
+                  securityFeaturesCheck.codeqlEnabled;
+                
+                return {
+                  key: 'security-features-check',
+                  result: {
+                    exists: true,
+                    message: allFeaturesEnabled 
+                      ? 'All security features are enabled' 
+                      : someFeaturesEnabled 
+                        ? 'Some security features are enabled, but not all'
+                        : 'No security features are enabled',
+                    status: allFeaturesEnabled ? 'success' : someFeaturesEnabled ? 'warning' : 'error',
+                    location: 'repo',
+                    securityFeatures: securityFeaturesCheck
+                  }
+                };
+              } catch (error) {
+                console.error("Error checking security features:", error);
+                return {
+                  key: 'security-features-check',
+                  result: {
+                    exists: false,
+                    message: 'Unable to check security features',
+                    status: 'warning',
+                    location: 'none'
+                  }
+                };
+              }
+            })());
+            
+            // Telemetry check
+            checks.push((async () => {
+              try {
+                const telemetryCheck = await checkForTelemetryFiles(owner, repo);
+                
+                return {
+                  key: 'telemetry-check',
+                  result: {
+                    exists: true,
+                    message: telemetryCheck.containsTelemetry 
+                      ? 'Telemetry/analytics files found in repository' 
+                      : 'No telemetry or analytics files detected',
+                    status: telemetryCheck.containsTelemetry ? 'warning' : 'success',
+                    location: 'repo',
+                    telemetryCheck: telemetryCheck
+                  }
+                };
+              } catch (error) {
+                console.error("Error checking for telemetry files:", error);
+                return {
+                  key: 'telemetry-check',
+                  result: {
+                    exists: false,
+                    message: 'Unable to check for telemetry files',
+                    status: 'warning',
+                    location: 'none'
+                  }
+                };
+              }
+            })());
+            
+            // Ownership property check
+            checks.push((async () => {
+              try {
+                const ownershipProperty = await checkOwnershipProperty(owner, repo);
+                
+                return {
+                  key: 'ownership-property-check',
+                  result: {
+                    exists: true,
+                    message: ownershipProperty.exists 
+                      ? `Ownership property found: ${ownershipProperty.name}` 
+                      : 'No ownership property set for this repository',
+                    status: ownershipProperty.exists ? 'success' : 'warning',
+                    location: 'repo',
+                    ownershipProperty: ownershipProperty
+                  }
+                };
+              } catch (error) {
+                console.error("Error checking for ownership property:", error);
+                return {
+                  key: 'ownership-property-check',
+                  result: {
+                    exists: false,
+                    message: 'Unable to check ownership property',
+                    status: 'warning',
+                    location: 'none'
+                  }
+                };
+              }
+            })());
+            
+            // Internal references check (most API intensive, do last)
+            if (secondRateLimitCheck.remaining > 15) {
+              checks.push((async () => {
+                try {
+                  const internalRefsCheck = await scanForInternalReferences(owner, repo);
+                  
+                  return {
+                    key: 'internal-references-check',
+                    result: {
+                      exists: true,
+                      message: internalRefsCheck.containsInternalRefs 
+                        ? 'Found potential internal references or confidential information'
+                        : 'No internal references or confidential information detected',
+                      status: internalRefsCheck.containsInternalRefs ? 'warning' : 'success',
+                      location: 'repo',
+                      internalReferences: internalRefsCheck.issues
+                    }
+                  };
+                } catch (error) {
+                  console.error("Error scanning for internal references:", error);
+                  return {
+                    key: 'internal-references-check',
+                    result: {
+                      exists: false,
+                      message: 'Unable to scan for internal references',
+                      status: 'warning',
+                      location: 'none'
+                    }
+                  };
+                }
+              })());
+            } else {
+              // Skip internal references check if rate limits are low
+              toast.info("Skipping internal references check due to API rate limits", {
+                description: "This check requires multiple API calls and has been skipped to avoid hitting rate limits."
+              });
+            }
+            
+            // Execute all checks in parallel
+            const checkResults = await Promise.allSettled(checks);
+            
+            // Add results to the validation summary
+            checkResults.forEach(result => {
+              if (result.status === 'fulfilled' && result.value) {
+                results[result.value.key] = result.value.result;
+              }
+            });
+            
+            // Update validation summary with all results
             setValidationSummary({
               repoName: `${owner}/${repo}`,
               repoUrl: url,
@@ -415,145 +590,25 @@ function AppContent() {
               owner,
               repo
             });
-            return; // Skip the additional API-heavy checks
-          }
-          // Perform scan for internal references and confidential information
-          try {
-            const internalRefsCheck = await scanForInternalReferences(owner, repo);
             
-            results['internal-references-check'] = {
-              exists: true,
-              message: internalRefsCheck.containsInternalRefs 
-                ? 'Found potential internal references or confidential information'
-                : 'No internal references or confidential information detected',
-              status: internalRefsCheck.containsInternalRefs ? 'warning' : 'success',
-              location: 'repo',
-              internalReferences: internalRefsCheck.issues
-            };
-          } catch (error) {
-            console.error("Error scanning for internal references:", error);
-            // Add a placeholder result
-            results['internal-references-check'] = {
-              exists: false,
-              message: 'Unable to scan for internal references',
-              status: 'warning',
-              location: 'none'
-            };
-          }
-          
-          // Check GitHub security features
-          try {
-            const securityFeaturesCheck = await checkSecurityFeatures(owner, repo);
+            // Update rate limit info when all checks are complete
+            setRateLimitInfo(getCurrentRateLimit());
             
-            // Determine status based on enabled features
-            const allFeaturesEnabled = 
-              securityFeaturesCheck.secretScanningEnabled && 
-              securityFeaturesCheck.dependabotSecurityUpdatesEnabled && 
-              securityFeaturesCheck.codeqlEnabled;
-              
-            const someFeaturesEnabled = 
-              securityFeaturesCheck.secretScanningEnabled || 
-              securityFeaturesCheck.dependabotSecurityUpdatesEnabled || 
-              securityFeaturesCheck.codeqlEnabled;
+            // Notify user that all checks are complete
+            toast.success("Repository scan complete!", {
+              description: "All checks have been completed. Review the results below."
+            });
             
-            results['security-features-check'] = {
-              exists: true,
-              message: allFeaturesEnabled 
-                ? 'All security features are enabled' 
-                : someFeaturesEnabled 
-                  ? 'Some security features are enabled, but not all'
-                  : 'No security features are enabled',
-              status: allFeaturesEnabled ? 'success' : someFeaturesEnabled ? 'warning' : 'error',
-              location: 'repo',
-              securityFeatures: securityFeaturesCheck
-            };
-          } catch (error) {
-            console.error("Error checking security features:", error);
-            // Add a placeholder result
-            results['security-features-check'] = {
-              exists: false,
-              message: 'Unable to check security features',
-              status: 'warning',
-              location: 'none'
-            };
-          }
-          
-          // Check for telemetry files
-          try {
-            const telemetryCheck = await checkForTelemetryFiles(owner, repo);
+          } catch (err) {
+            console.error("Error in progressive loading:", err);
+            // Don't overwrite the main validation results if these additional checks fail
             
-            results['telemetry-check'] = {
-              exists: true,
-              message: telemetryCheck.containsTelemetry 
-                ? 'Telemetry/analytics files found in repository' 
-                : 'No telemetry or analytics files detected',
-              status: telemetryCheck.containsTelemetry ? 'warning' : 'success',
-              location: 'repo',
-              telemetryCheck: telemetryCheck
-            };
-          } catch (error) {
-            console.error("Error checking for telemetry files:", error);
-            // Add a placeholder result
-            results['telemetry-check'] = {
-              exists: false,
-              message: 'Unable to check for telemetry files',
-              status: 'warning',
-              location: 'none'
-            };
+            toast.error("Some advanced checks couldn't be completed", {
+              description: "Basic validation is complete, but some detailed checks failed to run."
+            });
           }
-          
-          // Check for ownership property
-          try {
-            const ownershipProperty = await checkOwnershipProperty(owner, repo);
-            
-            results['ownership-property-check'] = {
-              exists: true,
-              message: ownershipProperty.exists 
-                ? `Ownership property found: ${ownershipProperty.name}` 
-                : 'No ownership property set for this repository',
-              status: ownershipProperty.exists ? 'success' : 'warning',
-              location: 'repo',
-              ownershipProperty: ownershipProperty
-            };
-          } catch (error) {
-            console.error("Error checking for ownership property:", error);
-            // Add a placeholder result
-            results['ownership-property-check'] = {
-              exists: false,
-              message: 'Unable to check ownership property',
-              status: 'warning',
-              location: 'none'
-            };
-          }
-          
-          // Update validation summary with all results
-          setValidationSummary({
-            repoName: `${owner}/${repo}`,
-            repoUrl: url,
-            results,
-            missingRequired,
-            missingRecommended,
-            owner,
-            repo
-          });
-          
-          // Update rate limit info when all checks are complete
-          setRateLimitInfo(getCurrentRateLimit());
-          
-          // Notify user that all checks are complete
-          toast.success("Repository scan complete!", {
-            description: "All checks have been completed. Review the results below."
-          });
-          
-        } catch (err) {
-          console.error("Error in progressive loading:", err);
-          // Don't overwrite the main validation results if these additional checks fail
-          
-          toast.error("Some advanced checks couldn't be completed", {
-            description: "Basic validation is complete, but some detailed checks failed to run."
-          });
-        }
-      }, 100); // Small delay to let the UI update with initial results first
+        }, 100); // Small delay to let the UI update with initial results first
+      }
       
     } catch (err) {
       console.error("Validation error:", err);

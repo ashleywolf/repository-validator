@@ -5,6 +5,7 @@ import { twMerge } from "tailwind-merge"
 declare global {
   interface Window {
     pendingGitHubRequests?: number;
+    gitHubRequestCache?: Map<string, {data: any, timestamp: number, headers?: Record<string, string>}>;
     spark: any;
   }
 }
@@ -412,6 +413,20 @@ export async function checkRateLimits(): Promise<{
   isAuthenticated: boolean;
 }> {
   try {
+    // First check if we have a cached or already obtained rate limit info
+    if (currentRateLimit) {
+      // If current rate limit info is recent (less than 30 seconds old), use it
+      const rateLimitAge = Date.now() - currentRateLimit.reset.getTime();
+      if (rateLimitAge < 30 * 1000) {
+        return {
+          ok: currentRateLimit.remaining > 10,
+          remaining: currentRateLimit.remaining,
+          resetTime: currentRateLimit.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          isAuthenticated: currentRateLimit.limit > 60
+        };
+      }
+    }
+    
     const rateLimitUrl = 'https://api.github.com/rate_limit';
     const response = await makeGitHubRequest(rateLimitUrl, 1); // Use fewer retries for this check
     
@@ -452,10 +467,44 @@ export async function checkRateLimits(): Promise<{
   }
 }
 
-// Helper function to make GitHub API requests with improved retries and rate limit handling
+// Helper function to make GitHub API requests with improved retries, rate limit handling, and caching
 export async function makeGitHubRequest(url: string, maxRetries = 3): Promise<Response> {
   let retries = 0;
   let lastError: Error | null = null;
+  
+  // Initialize cache if not already created
+  if (!window.gitHubRequestCache) {
+    window.gitHubRequestCache = new Map();
+  }
+  
+  // Check cache first (except for rate_limit endpoint which should always be fresh)
+  const cacheKey = url;
+  const isRateLimitUrl = url.includes('/rate_limit');
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL for most endpoints
+  
+  if (!isRateLimitUrl && window.gitHubRequestCache.has(cacheKey)) {
+    const cachedData = window.gitHubRequestCache.get(cacheKey)!;
+    const age = Date.now() - cachedData.timestamp;
+    
+    if (age < CACHE_TTL) {
+      console.info(`Using cached data for ${url}, age: ${Math.round(age/1000)}s`);
+      
+      // Create a new Response object from the cached data
+      const responseInit: ResponseInit = {};
+      if (cachedData.headers) {
+        responseInit.headers = cachedData.headers;
+      }
+      
+      return new Response(
+        typeof cachedData.data === 'string' 
+          ? cachedData.data 
+          : JSON.stringify(cachedData.data),
+        responseInit
+      );
+    } else {
+      console.info(`Cache expired for ${url}, fetching fresh data`);
+    }
+  }
   
   // Track ongoing requests to avoid overwhelming the API
   const pendingRequests = window.pendingGitHubRequests || 0;
@@ -537,6 +586,40 @@ export async function makeGitHubRequest(url: string, maxRetries = 3): Promise<Re
           await new Promise(resolve => setTimeout(resolve, waitTime));
           retries++;
           continue;
+        }
+        
+        // Cache successful responses
+        if (response.ok && !isRateLimitUrl) {
+          try {
+            // Clone the response so we can read it twice
+            const clonedResponse = response.clone();
+            
+            // Try to get headers
+            const headers: Record<string, string> = {};
+            response.headers.forEach((value, key) => {
+              headers[key] = value;
+            });
+            
+            // Try to parse as JSON first
+            try {
+              const data = await clonedResponse.json();
+              window.gitHubRequestCache!.set(cacheKey, {
+                data,
+                timestamp: Date.now(),
+                headers
+              });
+            } catch (e) {
+              // If not JSON, store as text
+              const text = await clonedResponse.text();
+              window.gitHubRequestCache!.set(cacheKey, {
+                data: text,
+                timestamp: Date.now(),
+                headers
+              });
+            }
+          } catch (e) {
+            console.warn('Failed to cache response:', e);
+          }
         }
         
         return response;
@@ -1040,6 +1123,23 @@ export async function checkOwnershipProperty(owner: string, repo: string): Promi
       exists: false,
       name: null
     };
+  }
+}
+
+// Clear cached request data, useful when revalidating
+export function clearGitHubRequestCache(url?: string): void {
+  if (!window.gitHubRequestCache) {
+    return;
+  }
+  
+  if (url) {
+    // Clear just one specific URL from cache
+    window.gitHubRequestCache.delete(url);
+    console.info(`Cleared cache for ${url}`);
+  } else {
+    // Clear all cached data
+    window.gitHubRequestCache.clear();
+    console.info("Cleared all GitHub API request cache");
   }
 }
 
