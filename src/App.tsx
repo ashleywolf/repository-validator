@@ -335,9 +335,9 @@ function AppContent() {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
-          errorMessage = "Authentication error (401). This may be due to API rate limiting or the repository requires authentication.";
+          errorMessage = "Authentication error (401). This repository may be private or doesn't exist.";
         } else if (errorMessage.includes("GitHub API error: 403")) {
-          errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
+          errorMessage = "Access forbidden (403). You have likely exceeded GitHub's API rate limits (60 requests per hour).";
         } else if (errorMessage.includes("GitHub API error: 404")) {
           errorMessage = "Repository not found (404). Please check that the URL is correct and the repository exists.";
         } else if (errorMessage.includes("GitHub API error: 500")) {
@@ -499,39 +499,39 @@ function AppContent() {
                 <div className="flex justify-between items-center text-xs text-muted-foreground bg-secondary/30 p-2 rounded">
                   <p className="flex items-center">
                     <Warning className="h-3 w-3 mr-1" />
-                    GitHub API has rate limits. Public repositories are limited to 60 requests per hour.
+                    This tool only works with public repositories. GitHub API has rate limits of 60 requests per hour.
                   </p>
                 </div>
                 
-                {error && (
-                  <Alert variant="destructive" className="mt-4">
-                    <X className="h-4 w-4" />
-                    <AlertTitle>Repository Access Error</AlertTitle>
-                    <AlertDescription>
-                      {error}
-                      {error.includes("API rate limit exceeded") && (
-                        <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <p>GitHub limits unauthenticated requests to 60 per hour. Please try again later.</p>
-                        </div>
-                      )}
-                      {error.includes("Authentication error (401)") && (
-                        <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <p>This may be due to:</p>
-                          <ul className="list-disc pl-4 mt-1">
-                            <li>GitHub API rate limiting (try again later)</li>
-                            <li>The repository URL is incorrect</li>
-                            <li>The repository exists but requires authentication</li>
-                          </ul>
-                        </div>
-                      )}
-                      {error.includes("Repository not found") && (
-                        <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                          <p>Make sure the repository exists and is public.</p>
-                        </div>
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                )}
+                  {error && (
+                    <Alert variant="destructive" className="mt-4">
+                      <X className="h-4 w-4" />
+                      <AlertTitle>Repository Access Error</AlertTitle>
+                      <AlertDescription>
+                        {error}
+                        {error.includes("API rate limit exceeded") && (
+                          <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
+                            <p>GitHub limits API requests to 60 per hour for unauthenticated users. Please try again later.</p>
+                          </div>
+                        )}
+                        {error.includes("Authentication error (401)") && (
+                          <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
+                            <p>This could mean:</p>
+                            <ul className="list-disc pl-4 mt-1">
+                              <li>The repository URL is incorrect</li>
+                              <li>The repository is private and cannot be accessed</li>
+                              <li>GitHub API rate limiting (try again later)</li>
+                            </ul>
+                          </div>
+                        )}
+                        {error.includes("Repository not found") && (
+                          <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
+                            <p>Make sure the repository exists and is public. This tool only works with public repositories.</p>
+                          </div>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  )}
               </div>
             </CardContent>
           </Card>
@@ -545,7 +545,7 @@ function AppContent() {
                     <span>Repository Overview</span>
                     <Badge variant="outline" className="bg-secondary/50 flex items-center">
                       <FolderOpenIcon className="mr-1 h-3 w-3" />
-                      Public Repository
+                      Public Repository Only
                     </Badge>
                   </CardTitle>
                 </CardHeader>

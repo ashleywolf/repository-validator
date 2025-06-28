@@ -403,17 +403,11 @@ export function addAuthHeaders(): Record<string, string> {
     'Accept': 'application/vnd.github.v3+json'
   };
   
-  // Try to use token from localStorage if available
-  const token = localStorage.getItem("github_access_token");
-  if (token) {
-    // Only add real GitHub tokens (not simulated Spark tokens)
-    if (token.startsWith('ghp_') || token.startsWith('ghs_')) {
-      headers['Authorization'] = `token ${token}`;
-    } else if (!token.startsWith('spark_github_')) {
-      // For other token formats (like OAuth tokens)
-      headers['Authorization'] = `token ${token}`;
-    }
-  }
+  // Add a user-agent to help with rate limiting
+  headers['User-Agent'] = 'GitHub-Open-Source-Checker';
+  
+  // No authentication is being used - the app now works with public repositories only
+  // This simplifies the experience and prevents authentication errors
   
   return headers;
 }
