@@ -17,96 +17,96 @@
 :root {
   /* Border radius */
   --radius: 0.5rem;
-  --chart-1: #3a5ba0;
-  --chart-2: #f7c873;
-  --chart-3: #6ea3c1;
-  --chart-4: #b0b8c1;
-  --chart-5: #2d1e2f;
-  --sidebar: #e3eaf2;
-  --sidebar-foreground: #1a2238;
-  --sidebar-primary: #3a5ba0;
-  --sidebar-primary-foreground: #fffbe6;
-  --sidebar-accent: #f7c873;
-  --sidebar-accent-foreground: #1a2238;
-  --sidebar-border: #b0b8c1;
-  --sidebar-ring: #f7c873;
-  --font-sans: Libre Baskerville, serif;
-  --font-mono: Geist Mono, monospace;
+  --chart-1: #0969da;
+  --chart-2: #2da44e;
+  --chart-3: #6e7781;
+  --chart-4: #cf222e;
+  --chart-5: #8250df;
+  --sidebar: #f6f8fa;
+  --sidebar-foreground: #24292f;
+  --sidebar-primary: #0969da;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #2da44e;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #d0d7de;
+  --sidebar-ring: #0969da;
+  --font-sans: Inter, sans-serif;
+  --font-mono: JetBrains Mono, monospace;
   --shadow-color: hsl(0 0% 0%);
   --shadow-opacity: 0;
   --shadow-blur: 0px;
   --shadow-spread: 0px;
   --shadow-offset-x: 0px;
   --shadow-offset-y: 1px;
-  --font-serif: Geist Mono, monospace;
+  --font-serif: JetBrains Mono, monospace;
 }
 
 /* Dark theme (default) */
 .dark {
-  /* Base colors - mission-inspired theme */
-  --background: #f5f7fa; /* Dark background */
-  --foreground: #1a2238; /* Light text */
+  /* Base colors - GitHub dark theme inspired */
+  --background: #0d1117; /* GitHub dark background */
+  --foreground: #f6f8fa; /* GitHub light text */
   
-  --card: #e3eaf2;
-  --card-foreground: #1a2238;
+  --card: #161b22;
+  --card-foreground: #f6f8fa;
   
-  --popover: #fffbe6;
-  --popover-foreground: #1a2238;
+  --popover: #161b22;
+  --popover-foreground: #f6f8fa;
   
   /* Action colors */
-  --primary: #3a5ba0; /* Vibrant purple - Mission color */
-  --primary-foreground: #fffbe6;
+  --primary: #0969da; /* GitHub blue */
+  --primary-foreground: #ffffff;
   
-  --secondary: #f7c873;
-  --secondary-foreground: #1a2238;
+  --secondary: #6e7781;
+  --secondary-foreground: #ffffff;
   
-  --accent: #6ea3c1; /* Success green */
-  --accent-foreground: #fffbe6;
+  --accent: #2da44e; /* GitHub green */
+  --accent-foreground: #ffffff;
   
-  --destructive: #2d1e2f; /* Error red */
-  --destructive-foreground: #fffbe6;
+  --destructive: #cf222e; /* GitHub red */
+  --destructive-foreground: #ffffff;
   
   /* Supporting UI colors */
-  --muted: #e5e5df;
-  --muted-foreground: #3a5ba0;
+  --muted: #21262d;
+  --muted-foreground: #8b949e;
   
-  --border: #b0b8c1;
-  --input: #6ea3c1;
-  --ring: #f7c873;
+  --border: #30363d;
+  --input: #30363d;
+  --ring: #0969da;
 }
 
 /* Light theme */
 .light {
-  /* Base colors - light mission theme */
-  --background: #f5f7fa; /* Light background */
-  --foreground: #1a2238; /* Dark text */
+  /* Base colors - GitHub light theme inspired */
+  --background: #ffffff; /* GitHub light background */
+  --foreground: #24292f; /* GitHub dark text */
   
-  --card: #e3eaf2;
-  --card-foreground: #1a2238;
+  --card: #f6f8fa;
+  --card-foreground: #24292f;
   
-  --popover: #fffbe6;
-  --popover-foreground: #1a2238;
+  --popover: #ffffff;
+  --popover-foreground: #24292f;
   
   /* Action colors */
-  --primary: #3a5ba0; /* Keep the same purple for brand consistency */
-  --primary-foreground: #fffbe6;
+  --primary: #0969da; /* GitHub blue */
+  --primary-foreground: #ffffff;
   
-  --secondary: #f7c873;
-  --secondary-foreground: #1a2238;
+  --secondary: #6e7781;
+  --secondary-foreground: #ffffff;
   
-  --accent: #6ea3c1; /* Slightly darker green for better contrast */
-  --accent-foreground: #fffbe6;
+  --accent: #2da44e; /* GitHub green */
+  --accent-foreground: #ffffff;
   
-  --destructive: #2d1e2f; /* Same error red */
-  --destructive-foreground: #fffbe6;
+  --destructive: #cf222e; /* GitHub red */
+  --destructive-foreground: #ffffff;
   
   /* Supporting UI colors */
-  --muted: #e5e5df;
-  --muted-foreground: #3a5ba0;
+  --muted: #f6f8fa;
+  --muted-foreground: #57606a;
   
-  --border: #b0b8c1;
-  --input: #6ea3c1;
-  --ring: #f7c873;
+  --border: #d0d7de;
+  --input: #d0d7de;
+  --ring: #0969da;
 }
 
 @theme {
@@ -139,41 +139,40 @@
   --radius-full: 9999px;
 }
 
-/* Mission theme specific styles */
-.spy-glow {
-  box-shadow: 0 0 15px rgba(109, 40, 217, 0.5);
+/* GitHub themed styles */
+.github-glow {
+  box-shadow: 0 0 15px rgba(9, 105, 218, 0.3);
 }
 
-.dark .spy-glow {
-  box-shadow: 0 0 15px rgba(109, 40, 217, 0.5);
+.dark .github-glow {
+  box-shadow: 0 0 15px rgba(9, 105, 218, 0.4);
 }
 
-.light .spy-glow {
-  box-shadow: 0 0 10px rgba(109, 40, 217, 0.3);
+.light .github-glow {
+  box-shadow: 0 0 10px rgba(9, 105, 218, 0.2);
 }
 
-.mission-card {
+.github-card {
   border: 1px solid var(--border);
 }
 
-.dark .mission-card {
-  background: linear-gradient(135deg, var(--card) 0%, oklch(0.2 0.03 264) 100%);
+.dark .github-card {
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
-.light .mission-card {
-  background: linear-gradient(135deg, var(--card) 0%, oklch(0.9 0.03 264) 100%);
+.light .github-card {
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
-.mission-badge {
-  background: linear-gradient(135deg, var(--primary) 0%, oklch(0.7 0.25 280) 100%);
+.github-badge {
+  background: var(--primary);
 }
 
-.mission-text {
-  background: linear-gradient(90deg, var(--primary) 0%, oklch(0.7 0.25 280) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-fill-color: transparent;
+.github-text {
+  color: var(--primary);
+  font-weight: 600;
 }
 
 /* Octocat animations */

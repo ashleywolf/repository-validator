@@ -21,7 +21,7 @@ import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
 import { ThemeProvider } from "./context/theme-context";
 import { ThemeToggle } from "./components/theme-toggle";
-import { OctocatWizard } from "./components/octocat";
+import { GitHubLogo } from "./components/github-logo";
 import { CreatePRButton } from "./components/create-pr-button";
 import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -441,25 +441,25 @@ function AppContent() {
           <div className="absolute right-4 top-4">
             <ThemeToggle />
           </div>
-          <OctocatWizard size={140} className="mb-4" />
-          <h1 className="text-3xl font-bold mission-text py-2">Mission RepOSSible</h1>
-          <h2 className="text-xl text-muted-foreground">GitHub Open Source Release Checklist</h2>
+          <GitHubLogo size={120} className="mb-4" />
+          <h1 className="text-3xl font-bold github-text py-2">GitHub OSS Compliance Checker</h1>
+          <h2 className="text-xl text-muted-foreground">Open Source Release Compliance Tool</h2>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
-          Your mission, should you choose to accept it: validate your GitHub repository structure to ensure all
+          Validate your GitHub repository structure to ensure all
           required files for open source compliance are in place.
         </p>
       </header>
       
       {!showTemplateView ? (
         <>
-          <Card className="mb-8 mission-card spy-glow">
+          <Card className="mb-8 github-card github-glow">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle>Repository Validation</CardTitle>
                   <CardDescription>
-                    Enter a GitHub repository URL to begin your mission
+                    Enter a GitHub repository URL to begin validation
                   </CardDescription>
                 </div>
               </div>
@@ -479,7 +479,7 @@ function AppContent() {
                   <Button 
                     onClick={handleValidate} 
                     disabled={loading || !url.trim()}
-                    className="sm:w-auto w-full mission-badge"
+                    className="sm:w-auto w-full github-badge"
                   >
                     {loading ? (
                       <span className="flex items-center">
@@ -539,7 +539,7 @@ function AppContent() {
           {validationSummary && (
             <>
               {/* Repository Status Card */}
-              <Card className="mb-6 mission-card spy-glow">
+              <Card className="mb-6 github-card github-glow">
                 <CardHeader>
                   <CardTitle className="flex justify-between">
                     <span>Repository Overview</span>
@@ -592,7 +592,7 @@ function AppContent() {
               </Card>
               
               {/* File Validation Results Card */}
-              <Card className="mission-card spy-glow">
+              <Card className="github-card github-glow">
                 <CardHeader>
                   <CardTitle className="flex justify-between">
                     <span>Validation Results</span>
@@ -920,7 +920,7 @@ git push -f origin main
       )}
       
       <footer className="mt-16 text-center text-sm text-muted-foreground">
-        <p>Mission RepOSSible – This message will self-destruct after your repository is compliant</p>
+        <p>GitHub OSS Compliance Checker – Helping repositories meet open source standards</p>
         <div className="flex justify-center mt-2">
           <a 
             href="https://github.com/github/github-ospo/tree/main/release%20template" 
@@ -928,7 +928,10 @@ git push -f origin main
             rel="noopener noreferrer" 
             className="text-primary text-xs hover:underline flex items-center opacity-70 hover:opacity-100 transition-opacity"
           >
-            <GithubLogo className="mr-1" size={12} />
+            <svg className="mr-1" width="12" height="12" viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg">
+              <path fillRule="evenodd" clipRule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217C0 70.973 13.993 89.389 33.405 95.907C35.832 96.397 36.721 94.848 36.721 93.545C36.721 92.404 36.641 88.493 36.641 84.418C23.051 87.352 20.14 78.551 20.14 78.551C17.961 72.847 14.727 71.381 14.727 71.381C10.325 68.366 15.044 68.366 15.044 68.366C19.928 68.692 22.512 73.414 22.512 73.414C26.834 80.917 33.811 78.795 36.886 77.492C37.299 74.314 38.596 72.111 40.04 70.89C29.172 69.751 17.802 65.514 17.802 46.547C17.802 41.175 19.697 36.777 22.593 33.354C22.099 32.133 20.453 27.08 23.051 20.315C23.051 20.315 27.129 19.011 36.641 25.349C40.579 24.291 44.684 23.749 48.854 23.749C53.025 23.749 57.13 24.291 61.067 25.349C70.578 19.011 74.657 20.315 74.657 20.315C77.254 27.08 75.608 32.133 75.114 33.354C78.091 36.777 79.986 41.175 79.986 46.547C79.986 65.514 68.615 69.669 57.748 70.89C59.686 72.437 61.304 75.291 61.304 79.938C61.304 86.478 61.224 91.931 61.224 93.545C61.224 94.848 62.112 96.397 64.54 95.907C83.952 89.389 97.945 70.973 97.945 49.217C97.945 22 76.025 0 48.854 0Z" 
+                fill="currentColor" className="text-primary" />
+            </svg>
             Open Source Templates
           </a>
         </div>
