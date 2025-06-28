@@ -798,7 +798,7 @@ function AppContent() {
                   <div className="flex-1">
                     <Input
                       id="repo-url"
-                      placeholder="https://github.com/username/repository"
+                      placeholder="https://github.com/github/github-ospo"
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
                       className="w-full bg-secondary/50 border-primary/30"
