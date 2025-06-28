@@ -557,6 +557,23 @@ export async function makeGitHubRequest(url: string, maxRetries = 3): Promise<Re
       await new Promise(resolve => setTimeout(resolve, 200 * pendingRequests));
     }
     
+    // Check rate limits proactively before making the request
+    if (!isRateLimitUrl) {
+      try {
+        const rateLimitCheck = await checkRateLimits();
+        if (!rateLimitCheck.ok && rateLimitCheck.remaining < 5) {
+          // If we're very close to the limit, wait a bit before making the request
+          // This helps ensure we don't hit the limit unexpectedly
+          const waitTime = 1000 * (Math.random() * 2 + 1); // 1-3 seconds random delay
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          console.warn(`Rate limit low (${rateLimitCheck.remaining}), added delay before request`);
+        }
+      } catch (e) {
+        // If we can't check rate limits, proceed anyway
+        console.warn("Could not check rate limits before making request", e);
+      }
+    }
+    
     while (retries <= maxRetries) {
       try {
         const headers = addAuthHeaders();

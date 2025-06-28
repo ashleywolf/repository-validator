@@ -46,6 +46,7 @@ import { useAuth } from "./context/auth-context";
 import { GitHubAuth } from "./components/github-auth";
 import { AuthProvider } from "./context/auth-context";
 import { PatInput } from "./components/pat-input";
+import { TestApiButton } from "./components/test-api-button";
 import {
   Dialog,
   DialogContent,
@@ -755,6 +756,7 @@ function AppContent() {
                 <PatInput />
               </DialogContent>
             </Dialog>
+            <TestApiButton />
             <ThemeToggle />
           </div>
           <GitHubLogo size={120} className="mb-4 animate-bounce-gentle" />
