@@ -17,7 +17,11 @@ import {
   exportSbomData,
   scanForInternalReferences,
   checkSecurityFeatures,
-  SecurityFeatures
+  SecurityFeatures,
+  checkForTelemetryFiles,
+  TelemetryCheck,
+  checkOwnershipProperty,
+  OwnershipProperty
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -44,7 +48,10 @@ import {
   LinkSimple,
   FolderOpen as FolderOpenIcon,
   ShieldCheck,
-  ShieldWarning
+  ShieldWarning,
+  Gauge,
+  UserCircle
+} from "@phosphor-icons/react";
 } from "@phosphor-icons/react";
 
 function AppContent() {
@@ -352,6 +359,54 @@ function AppContent() {
         results['security-features-check'] = {
           exists: false,
           message: 'Unable to check security features',
+          status: 'warning',
+          location: 'none'
+        };
+      }
+      
+      // Check for telemetry files
+      try {
+        const telemetryCheck = await checkForTelemetryFiles(owner, repo);
+        
+        results['telemetry-check'] = {
+          exists: true,
+          message: telemetryCheck.containsTelemetry 
+            ? 'Telemetry/analytics files found in repository' 
+            : 'No telemetry or analytics files detected',
+          status: telemetryCheck.containsTelemetry ? 'warning' : 'success',
+          location: 'repo',
+          telemetryCheck: telemetryCheck
+        };
+      } catch (error) {
+        console.error("Error checking for telemetry files:", error);
+        // Add a placeholder result
+        results['telemetry-check'] = {
+          exists: false,
+          message: 'Unable to check for telemetry files',
+          status: 'warning',
+          location: 'none'
+        };
+      }
+      
+      // Check for ownership property
+      try {
+        const ownershipProperty = await checkOwnershipProperty(owner, repo);
+        
+        results['ownership-property-check'] = {
+          exists: true,
+          message: ownershipProperty.exists 
+            ? `Ownership property found: ${ownershipProperty.name}` 
+            : 'No ownership property set for this repository',
+          status: ownershipProperty.exists ? 'success' : 'warning',
+          location: 'repo',
+          ownershipProperty: ownershipProperty
+        };
+      } catch (error) {
+        console.error("Error checking for ownership property:", error);
+        // Add a placeholder result
+        results['ownership-property-check'] = {
+          exists: false,
+          message: 'Unable to check ownership property',
           status: 'warning',
           location: 'none'
         };
@@ -942,6 +997,90 @@ function AppContent() {
                                     <p className="text-xs mt-1">
                                       All recommended security features are enabled for this repository.
                                     </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Telemetry Files Check */}
+                          {result.telemetryCheck && (
+                            <div className="mt-2">
+                              <div className="text-xs font-medium mb-1 flex items-center">
+                                {result.status === 'success' ? (
+                                  <Gauge className="h-3 w-3 mr-1" />
+                                ) : (
+                                  <Gauge className="h-3 w-3 mr-1" />
+                                )}
+                                Telemetry & Analytics Files:
+                              </div>
+                              <div className="bg-secondary/20 p-2 rounded text-xs">
+                                {!result.telemetryCheck.containsTelemetry ? (
+                                  <div className="text-accent flex items-center">
+                                    <Check className="h-3 w-3 mr-1" />
+                                    No telemetry or analytics files detected
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="text-amber-500 font-medium mb-1">
+                                      Telemetry/analytics files found:
+                                    </div>
+                                    <div className="space-y-1 mt-1 bg-secondary/30 p-2 rounded">
+                                      {result.telemetryCheck.telemetryFiles.map((file, index) => (
+                                        <div key={index} className="text-amber-700">
+                                          • {file}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="mt-2 p-2 bg-amber-50 text-amber-800 rounded">
+                                      <p className="font-medium">⚠️ Telemetry Notice</p>
+                                      <p className="text-xs mt-1">
+                                        Review telemetry and analytics code to ensure compliance with privacy laws and to document data collection in your project documentation.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Ownership Property Check */}
+                          {result.ownershipProperty && (
+                            <div className="mt-2">
+                              <div className="text-xs font-medium mb-1 flex items-center">
+                                {result.ownershipProperty.exists ? (
+                                  <UserCircle className="h-3 w-3 mr-1" />
+                                ) : (
+                                  <UserCircle className="h-3 w-3 mr-1" />
+                                )}
+                                Repository Ownership Property:
+                              </div>
+                              <div className="bg-secondary/20 p-2 rounded text-xs">
+                                {result.ownershipProperty.exists ? (
+                                  <div>
+                                    <div className="flex justify-between">
+                                      <span>Ownership property:</span>
+                                      <span className="font-medium text-accent">{result.ownershipProperty.name}</span>
+                                    </div>
+                                    <div className="mt-2 p-2 bg-green-50 text-green-800 rounded">
+                                      <p className="font-medium">✅ Ownership defined</p>
+                                      <p className="text-xs mt-1">
+                                        Repository has a defined ownership property which helps track responsibility and maintenance.
+                                      </p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="text-amber-500 flex items-center">
+                                      <X className="h-3 w-3 mr-1" />
+                                      No ownership property defined
+                                    </div>
+                                    <div className="mt-2 p-2 bg-amber-50 text-amber-800 rounded">
+                                      <p className="font-medium">⚠️ Recommendation</p>
+                                      <p className="text-xs mt-1">
+                                        Consider setting an ownership-name property to clearly define who is responsible for maintaining this repository.
+                                      </p>
+                                    </div>
                                   </div>
                                 )}
                               </div>

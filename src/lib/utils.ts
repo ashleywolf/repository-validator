@@ -52,6 +52,16 @@ export type SecurityFeatures = {
   codeqlEnabled: boolean;
 }
 
+export type OwnershipProperty = {
+  exists: boolean;
+  name: string | null;
+}
+
+export type TelemetryCheck = {
+  containsTelemetry: boolean;
+  telemetryFiles: string[];
+}
+
 export type ValidationResult = {
   exists: boolean;
   message: string;
@@ -64,6 +74,8 @@ export type ValidationResult = {
   fileUrl?: string; // URL to view the file directly
   internalReferences?: string[]; // List of internal references found
   securityFeatures?: SecurityFeatures; // GitHub security features status
+  telemetryCheck?: TelemetryCheck; // Telemetry files found
+  ownershipProperty?: OwnershipProperty; // Custom ownership property
 }
 
 export type FileRequirement = {
@@ -450,8 +462,8 @@ export async function rateRepoDescription(owner: string, repo: string): Promise<
       try {
         const prompt = spark.llmPrompt`
           
-  
-  
+
+
 Rate the quality of this GitHub repository description: "${description}"
 
 Consider:
@@ -468,7 +480,6 @@ Format your response as JSON with two fields:
 "rating": "great|good|poor",
 "feedback": "explanation here"
 }
-
 
 
         `;
@@ -705,6 +716,142 @@ export async function checkSecurityFeatures(owner: string, repo: string): Promis
   }
 }
 
+// Check for telemetry files in repository
+export async function checkForTelemetryFiles(owner: string, repo: string): Promise<TelemetryCheck> {
+  try {
+    // Files to check for telemetry implementation
+    const telemetryFilePatterns = [
+      'telemetry.py', 
+      'tracking.js',
+      'analytics.js',
+      'tracking.py',
+      'telemetry.js',
+      'analytics.py',
+      'tracking/index.js',
+      'telemetry/index.js',
+      'analytics/index.js',
+      'src/telemetry.js',
+      'src/telemetry.ts',
+      'src/analytics.js',
+      'src/analytics.ts',
+      'src/tracking.js',
+      'src/tracking.ts'
+    ];
+    
+    const foundTelemetryFiles: string[] = [];
+    
+    // First, let's check the root directory
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
+    const response = await makeGitHubRequest(apiUrl);
+    
+    if (!response.ok) {
+      console.warn(`Could not fetch repository contents for ${owner}/${repo}`);
+      return {
+        containsTelemetry: false,
+        telemetryFiles: []
+      };
+    }
+    
+    const contents = await response.json();
+    
+    // Check files in root directory
+    for (const item of contents) {
+      if (item.type === 'file' && telemetryFilePatterns.includes(item.name)) {
+        foundTelemetryFiles.push(item.path);
+      }
+    }
+    
+    // Check for telemetry files in common subdirectories
+    const commonDirs = ['src', 'lib', 'utils', 'telemetry', 'analytics', 'tracking'];
+    
+    for (const dir of commonDirs) {
+      // Check if the directory exists first
+      const dirItem = contents.find((item: any) => item.name === dir && item.type === 'dir');
+      
+      if (dirItem) {
+        const dirUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${dir}`;
+        try {
+          const dirResponse = await makeGitHubRequest(dirUrl);
+          
+          if (dirResponse.ok) {
+            const dirContents = await dirResponse.json();
+            
+            for (const item of dirContents) {
+              if (item.type === 'file') {
+                const filename = item.name.toLowerCase();
+                if (
+                  filename.includes('telemetry') || 
+                  filename.includes('tracking') || 
+                  filename.includes('analytics')
+                ) {
+                  foundTelemetryFiles.push(item.path);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error checking directory ${dir}:`, error);
+        }
+      }
+    }
+    
+    return {
+      containsTelemetry: foundTelemetryFiles.length > 0,
+      telemetryFiles: foundTelemetryFiles
+    };
+  } catch (error) {
+    console.error("Error checking for telemetry files:", error);
+    return {
+      containsTelemetry: false,
+      telemetryFiles: []
+    };
+  }
+}
+
+// Check for ownership-name custom property
+export async function checkOwnershipProperty(owner: string, repo: string): Promise<OwnershipProperty> {
+  try {
+    // API endpoint for custom properties
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/properties/ownership-name`;
+    
+    try {
+      const response = await makeGitHubRequest(apiUrl);
+      
+      if (response.ok) {
+        const propertyData = await response.json();
+        return {
+          exists: true,
+          name: propertyData.value || null
+        };
+      } else if (response.status === 404) {
+        // Property doesn't exist
+        return {
+          exists: false,
+          name: null
+        };
+      } else {
+        console.warn(`Error fetching ownership property: ${response.status}`);
+        return {
+          exists: false,
+          name: null
+        };
+      }
+    } catch (error) {
+      console.error("Error making request for ownership property:", error);
+      return {
+        exists: false,
+        name: null
+      };
+    }
+  } catch (error) {
+    console.error("Error checking ownership property:", error);
+    return {
+      exists: false,
+      name: null
+    };
+  }
+}
+
 // Combined comprehensive file requirements list
 export const consolidatedRequirements: FileRequirement[] = [
   { path: 'README.md', required: true, description: 'Project documentation' },
@@ -721,5 +868,7 @@ export const consolidatedRequirements: FileRequirement[] = [
   { path: 'setup.py', required: false, description: 'Package installation script' },
   // Special scan elements - these don't represent actual files but additional checks
   { path: 'internal-references-check', required: false, description: 'Internal references & confidential info check' },
-  { path: 'security-features-check', required: false, description: 'GitHub security features check' }
+  { path: 'security-features-check', required: false, description: 'GitHub security features check' },
+  { path: 'telemetry-check', required: false, description: 'Telemetry files check' },
+  { path: 'ownership-property-check', required: false, description: 'Ownership property check' }
 ];
