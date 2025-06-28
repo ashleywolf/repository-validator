@@ -1,6 +1,14 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
+// Add TypeScript global window property for GitHub API requests
+declare global {
+  interface Window {
+    pendingGitHubRequests?: number;
+    spark: any;
+  }
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -149,7 +157,11 @@ export async function analyzeSbomData(owner: string, repo: string): Promise<{
     const sbomUrl = getSbomApiUrl(owner, repo);
     
     try {
-      const response = await makeGitHubRequest(sbomUrl);
+      // SBOM API tends to be heavy and more likely to hit rate limits
+      // Add a small delay before this specific API call
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const response = await makeGitHubRequest(sbomUrl, 4); // Use more retries for SBOM
       
       if (!response.ok) {
         console.warn(`SBOM API returned status ${response.status} for ${owner}/${repo}`);
@@ -392,71 +404,166 @@ export function getCurrentRateLimit(): RateLimitInfo | null {
   return currentRateLimit;
 }
 
-// Helper function to make GitHub API requests with retries and rate limit handling
-export async function makeGitHubRequest(url: string, maxRetries = 2): Promise<Response> {
+// Function to preemptively check rate limits before making complex requests
+export async function checkRateLimits(): Promise<{
+  ok: boolean;
+  remaining: number;
+  resetTime: string;
+  isAuthenticated: boolean;
+}> {
+  try {
+    const rateLimitUrl = 'https://api.github.com/rate_limit';
+    const response = await makeGitHubRequest(rateLimitUrl, 1); // Use fewer retries for this check
+    
+    if (!response.ok) {
+      return {
+        ok: false,
+        remaining: 0,
+        resetTime: new Date().toLocaleTimeString(),
+        isAuthenticated: !!localStorage.getItem("github_access_token")
+      };
+    }
+    
+    const data = await response.json();
+    const coreLimit = data.resources.core;
+    
+    // Update global rate limit info
+    currentRateLimit = {
+      limit: coreLimit.limit,
+      remaining: coreLimit.remaining,
+      reset: new Date(coreLimit.reset * 1000),
+      used: coreLimit.used
+    };
+    
+    return {
+      ok: coreLimit.remaining > 10, // Consider "ok" if we have more than 10 requests left
+      remaining: coreLimit.remaining,
+      resetTime: new Date(coreLimit.reset * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      isAuthenticated: coreLimit.limit > 60 // If limit is > 60, we're authenticated
+    };
+  } catch (error) {
+    console.error("Error checking rate limits:", error);
+    return {
+      ok: false,
+      remaining: 0,
+      resetTime: new Date().toLocaleTimeString(),
+      isAuthenticated: !!localStorage.getItem("github_access_token")
+    };
+  }
+}
+
+// Helper function to make GitHub API requests with improved retries and rate limit handling
+export async function makeGitHubRequest(url: string, maxRetries = 3): Promise<Response> {
   let retries = 0;
   let lastError: Error | null = null;
   
-  while (retries <= maxRetries) {
-    try {
-      const headers = addAuthHeaders();
-      const response = await fetch(url, { headers });
-      
-      // Extract and store rate limit information from headers
+  // Track ongoing requests to avoid overwhelming the API
+  const pendingRequests = window.pendingGitHubRequests || 0;
+  window.pendingGitHubRequests = pendingRequests + 1;
+  
+  try {
+    // Add a small stagger for multiple concurrent requests
+    if (pendingRequests > 2) {
+      await new Promise(resolve => setTimeout(resolve, 200 * pendingRequests));
+    }
+    
+    while (retries <= maxRetries) {
       try {
-        const rateLimit = {
-          limit: parseInt(response.headers.get('x-ratelimit-limit') || '60', 10),
-          remaining: parseInt(response.headers.get('x-ratelimit-remaining') || '0', 10),
-          reset: new Date(parseInt(response.headers.get('x-ratelimit-reset') || '0', 10) * 1000),
-          used: parseInt(response.headers.get('x-ratelimit-used') || '0', 10)
-        };
-        currentRateLimit = rateLimit;
+        const headers = addAuthHeaders();
+        const response = await fetch(url, { headers });
         
-        // Log rate limit info for debugging
-        console.info(`Rate limit: ${rateLimit.remaining}/${rateLimit.limit}, resets at ${rateLimit.reset.toLocaleTimeString()}`);
-      } catch (e) {
-        console.warn('Failed to parse rate limit headers:', e);
-      }
-      
-      // If we get rate limited, check the retry strategy
-      if (response.status === 403) {
-        const retryAfterHeader = response.headers.get('retry-after');
-        const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : null;
+        // Extract and store rate limit information from headers
+        try {
+          const rateLimit = {
+            limit: parseInt(response.headers.get('x-ratelimit-limit') || '60', 10),
+            remaining: parseInt(response.headers.get('x-ratelimit-remaining') || '0', 10),
+            reset: new Date(parseInt(response.headers.get('x-ratelimit-reset') || '0', 10) * 1000),
+            used: parseInt(response.headers.get('x-ratelimit-used') || '0', 10)
+          };
+          currentRateLimit = rateLimit;
+          
+          // Log rate limit info for debugging
+          console.info(`Rate limit: ${rateLimit.remaining}/${rateLimit.limit}, resets at ${rateLimit.reset.toLocaleTimeString()}`);
+          
+          // Low rate limit warning - consider slowing down future requests
+          if (rateLimit.remaining < 5 && rateLimit.limit > 60) {
+            // We're authenticated but still running low on requests
+            console.warn(`Rate limit warning: only ${rateLimit.remaining} requests remaining`);
+          }
+        } catch (e) {
+          console.warn('Failed to parse rate limit headers:', e);
+        }
         
-        if (retries < maxRetries) {
-          const waitTime = retryAfter || 1000 * Math.pow(2, retries + 1); // Exponential backoff if no retry-after
-          console.warn(`Rate limited (403) on attempt ${retries + 1}. Waiting ${waitTime/1000}s before retry...`);
+        // Check for rate limit or abuse detection responses
+        if (response.status === 403 || response.status === 429) {
+          const responseBody = await response.text();
+          const isRateLimited = responseBody.includes("rate limit") || 
+                               response.headers.get('x-ratelimit-remaining') === '0';
+          const isAbuseDetection = responseBody.includes("abuse detection");
+          
+          const retryAfterHeader = response.headers.get('retry-after');
+          const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : null;
+          
+          if (retries < maxRetries) {
+            // For rate limits or abuse detection, use exponential backoff with jitter
+            const baseWaitTime = retryAfter || (isAbuseDetection ? 5000 : 2000) * Math.pow(2, retries);
+            // Add jitter to prevent thundering herd problem
+            const jitter = Math.random() * 1000;
+            const waitTime = baseWaitTime + jitter;
+            
+            console.warn(`API limit (${response.status}) on attempt ${retries + 1}. ` +
+                        `Waiting ${Math.round(waitTime/1000)}s before retry...`);
+            
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            retries++;
+            continue;
+          } else {
+            // If we've exhausted retries, throw with clear rate limit info
+            const resetTime = currentRateLimit?.reset ? currentRateLimit.reset.toLocaleTimeString() : 'unknown time';
+            const message = isRateLimited 
+              ? `GitHub API rate limit exceeded. Limit resets at ${resetTime}.`
+              : isAbuseDetection 
+                ? `GitHub API abuse detection triggered. Please try again later.`
+                : `GitHub API error: ${response.status}`;
+            
+            throw new Error(message);
+          }
+        }
+        
+        // Handle other potential error codes with retries
+        if (!response.ok && retries < maxRetries) {
+          const waitTime = 1000 * Math.pow(1.5, retries);
+          console.warn(`API error ${response.status} on attempt ${retries + 1}. Waiting ${waitTime/1000}s before retry...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           retries++;
           continue;
-        } else {
-          // If we've exhausted retries, throw with clear rate limit info
-          const resetTime = currentRateLimit?.reset ? currentRateLimit.reset.toLocaleTimeString() : 'unknown time';
-          throw new Error(`GitHub API rate limit exceeded. Limit resets at ${resetTime}.`);
         }
+        
+        return response;
+      } catch (error) {
+        console.error(`API request failed (attempt ${retries + 1}):`, error);
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        if (retries < maxRetries) {
+          // Wait a bit before retrying (increasing backoff)
+          const waitTime = 1000 * Math.pow(2, retries);
+          console.warn(`Waiting ${waitTime/1000}s before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          retries++;
+          continue;
+        }
+        
+        // If we've exhausted our retries, throw the last error
+        throw lastError;
       }
-      
-      return response;
-    } catch (error) {
-      console.error(`API request failed (attempt ${retries + 1}):`, error);
-      lastError = error instanceof Error ? error : new Error(String(error));
-      
-      if (retries < maxRetries) {
-        // Wait a bit before retrying (increasing backoff)
-        const waitTime = 1000 * Math.pow(2, retries);
-        console.warn(`Waiting ${waitTime/1000}s before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        retries++;
-        continue;
-      }
-      
-      // If we've exhausted our retries, throw the last error
-      throw lastError;
     }
+    
+    // This should never be reached, but TypeScript requires a return
+    throw lastError || new Error("Failed to complete request after retries");
+  } finally {
+    // Always decrement the pending request counter
+    window.pendingGitHubRequests = Math.max(0, (window.pendingGitHubRequests || 1) - 1);
   }
-  
-  // This should never be reached, but TypeScript requires a return
-  throw lastError || new Error("Failed to complete request after retries");
 }
 
 // Add auth headers for GitHub API requests
@@ -472,6 +579,9 @@ export function addAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("github_access_token");
   if (token) {
     headers['Authorization'] = `token ${token}`;
+    console.info('Using authenticated GitHub API request');
+  } else {
+    console.info('Using unauthenticated GitHub API request');
   }
   
   return headers;
@@ -602,70 +712,105 @@ export async function scanForInternalReferences(owner: string, repo: string): Pr
     const issues: string[] = [];
     let containsInternalRefs = false;
     
-    for (const filePath of filesToCheck) {
-      try {
-        const fileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
-        const response = await makeGitHubRequest(fileUrl);
-        
-        if (!response.ok) continue; // File doesn't exist, skip
-        
-        const fileData = await response.json();
-        // Skip directories or empty files
-        if (fileData.type !== 'file' || !fileData.content) continue;
-        
-        const content = atob(fileData.content); // Decode base64 content
-        
-        // Use LLM to analyze the content for internal references
-        const prompt = spark.llmPrompt`
-          
-  Analyze this file content for a GitHub repository that will be open-sourced.
-  
-  File path: ${filePath}
-  Content: ${content.substring(0, 4000)} ${content.length > 4000 ? '[content truncated for length]' : ''}
-  
-  Check for any of these concerning elements:
-  1. Internal company paths, tools, or codenames
-  2. Employee names or email aliases (especially internal patterns like username@github)
-  3. API keys, tokens, or secrets
-  4. Internal URLs, hostnames, or IP addresses
-  5. References to proprietary or internal-only technology
-  6. Company confidential information
-  7. Trademarks or product icons/assets
-  8. References to not-yet-announced products or features
-  
-  If you find any concerning elements, provide:
-  1. A brief description of each issue found
-  2. The general location in the file (e.g., "API key in configuration section")
-  
-  Format your response as JSON:
-  {
-    "hasIssues": true|false,
-    "issues": ["issue description 1", "issue description 2", ...]
-  }
-  
-  If no issues are found, return {"hasIssues": false, "issues": []}.
-
-        `;
-        
+    // Process files in smaller batches to avoid overwhelming the API
+    const batchSize = 3;
+    for (let i = 0; i < filesToCheck.length; i += batchSize) {
+      const batch = filesToCheck.slice(i, i + batchSize);
+      
+      // Process each batch in parallel
+      const batchPromises = batch.map(async (filePath) => {
         try {
-          const analysis = await spark.llm(prompt, "gpt-4o-mini", true);
-          const result = JSON.parse(analysis);
+          const fileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
           
-          if (result.hasIssues) {
-            containsInternalRefs = true;
-            issues.push(...result.issues.map((issue: string) => `${filePath}: ${issue}`));
+          // Use a slight delay between batches to avoid rate limiting
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
+          
+          const response = await makeGitHubRequest(fileUrl);
+          
+          if (!response.ok) return null; // File doesn't exist, skip
+          
+          const fileData = await response.json();
+          // Skip directories or empty files
+          if (fileData.type !== 'file' || !fileData.content) return null;
+          
+          const content = atob(fileData.content); // Decode base64 content
+          
+          // Only analyze if content is substantial
+          if (content.length < 10) return null;
+          
+          // Use LLM to analyze the content for internal references
+          const prompt = spark.llmPrompt`
+            
+    Analyze this file content for a GitHub repository that will be open-sourced.
+    
+    File path: ${filePath}
+    Content: ${content.substring(0, 4000)} ${content.length > 4000 ? '[content truncated for length]' : ''}
+    
+    Check for any of these concerning elements:
+    1. Internal company paths, tools, or codenames
+    2. Employee names or email aliases (especially internal patterns like username@github)
+    3. API keys, tokens, or secrets
+    4. Internal URLs, hostnames, or IP addresses
+    5. References to proprietary or internal-only technology
+    6. Company confidential information
+    7. Trademarks or product icons/assets
+    8. References to not-yet-announced products or features
+    
+    If you find any concerning elements, provide:
+    1. A brief description of each issue found
+    2. The general location in the file (e.g., "API key in configuration section")
+    
+    Format your response as JSON:
+    {
+      "hasIssues": true|false,
+      "issues": ["issue description 1", "issue description 2", ...]
+    }
+    
+    If no issues are found, return {"hasIssues": false, "issues": []}.
+
+          `;
+          
+          try {
+            // Use the mini model for faster analysis and to avoid hitting rate limits
+            const analysis = await spark.llm(prompt, "gpt-4o-mini", true);
+            const result = JSON.parse(analysis);
+            
+            if (result.hasIssues) {
+              containsInternalRefs = true;
+              return result.issues.map((issue: string) => `${filePath}: ${issue}`);
+            }
+          } catch (error) {
+            console.error(`Error analyzing ${filePath} for internal references:`, error);
+            return [`${filePath}: Error analyzing file content`];
+          }
+          
+          return null;
         } catch (error) {
-          console.error(`Error analyzing ${filePath} for internal references:`, error);
+          console.error(`Error fetching ${filePath}:`, error);
+          return null;
         }
-      } catch (error) {
-        console.error(`Error fetching ${filePath}:`, error);
-        continue;
+      });
+      
+      // Wait for all files in this batch to be processed
+      const batchResults = await Promise.all(batchPromises);
+      
+      // Filter out null results and flatten arrays
+      batchResults.forEach(result => {
+        if (Array.isArray(result)) {
+          issues.push(...result);
+        }
+      });
+      
+      // Add a small delay between batches
+      if (i + batchSize < filesToCheck.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
     
     return {
-      containsInternalRefs,
+      containsInternalRefs: issues.length > 0,
       issues
     };
   } catch (error) {

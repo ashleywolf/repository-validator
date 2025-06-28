@@ -23,7 +23,8 @@ import {
   checkOwnershipProperty,
   OwnershipProperty,
   getCurrentRateLimit,
-  RateLimitInfo
+  RateLimitInfo,
+  checkRateLimits
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -111,6 +112,37 @@ function AppContent() {
       
       let repoContents;
       
+      // Check rate limits before making main request
+      try {
+        const rateLimitCheck = await checkRateLimits();
+        
+        // Update UI with rate limit info
+        if (currentRateLimit) {
+          setRateLimitInfo(currentRateLimit);
+        }
+        
+        // Show warning if rates are getting low
+        if (!rateLimitCheck.ok) {
+          if (rateLimitCheck.remaining <= 5) {
+            const message = rateLimitCheck.isAuthenticated 
+              ? `You're close to the GitHub API rate limit (${rateLimitCheck.remaining} requests remaining)`
+              : `GitHub API rate limit is low (${rateLimitCheck.remaining}/60 requests remaining)`;
+              
+            toast.warning(message, {
+              description: `Rate limits reset at ${rateLimitCheck.resetTime}. ${!rateLimitCheck.isAuthenticated ? 'Consider adding a GitHub token for higher limits.' : ''}`,
+              duration: 6000
+            });
+          }
+        }
+      } catch (error) {
+        // Only throw if this is a rate limit error
+        if (error instanceof Error && error.message.includes('rate limit')) {
+          throw error;
+        }
+        // Otherwise continue - this check is optional
+        console.warn("Rate limit check failed, continuing anyway:", error);
+      }
+      
       // Use the makeGitHubRequest helper with retries and auth handling
       try {
         const response = await makeGitHubRequest(apiUrl);
@@ -131,6 +163,23 @@ function AppContent() {
         }
         
         repoContents = await response.json();
+        
+        // Show a toast notification about rate limits if we're getting low
+        const rateLimit = getCurrentRateLimit();
+        if (rateLimit && rateLimit.remaining < 20) {
+          const isAuthenticated = !!localStorage.getItem("github_access_token");
+          const resetTime = rateLimit.reset.toLocaleTimeString();
+          
+          if (rateLimit.remaining < 5) {
+            toast.warning(`API rate limit is very low: ${rateLimit.remaining} requests remaining`, {
+              description: `Rate limit will reset at ${resetTime}. ${!isAuthenticated ? "Consider adding an API token." : ""}`
+            });
+          } else if (rateLimit.remaining < 10) {
+            toast.info(`API rate limit notice: ${rateLimit.remaining} requests remaining`, {
+              description: `Rate limit will reset at ${resetTime}`
+            });
+          }
+        }
       } catch (error) {
         console.error("Error fetching repository contents:", error);
         throw error;
@@ -146,8 +195,14 @@ function AppContent() {
       }));
       
       // Get repository description rating
-      const repoDescriptionRating = await rateRepoDescription(owner, repo);
-      setDescriptionRating(repoDescriptionRating);
+      let repoDescriptionRating = null;
+      try {
+        repoDescriptionRating = await rateRepoDescription(owner, repo);
+        setDescriptionRating(repoDescriptionRating);
+      } catch (error) {
+        console.error("Error getting repo description:", error);
+        // Continue without description rating
+      }
       
       // Validate files against requirements
       const results: Record<string, ValidationResult> = {};
@@ -324,116 +379,7 @@ function AppContent() {
         };
       }
       
-      // Perform scan for internal references and confidential information
-      try {
-        const internalRefsCheck = await scanForInternalReferences(owner, repo);
-        
-        results['internal-references-check'] = {
-          exists: true,
-          message: internalRefsCheck.containsInternalRefs 
-            ? 'Found potential internal references or confidential information'
-            : 'No internal references or confidential information detected',
-          status: internalRefsCheck.containsInternalRefs ? 'warning' : 'success',
-          location: 'repo',
-          internalReferences: internalRefsCheck.issues
-        };
-      } catch (error) {
-        console.error("Error scanning for internal references:", error);
-        // Add a placeholder result
-        results['internal-references-check'] = {
-          exists: false,
-          message: 'Unable to scan for internal references',
-          status: 'warning',
-          location: 'none'
-        };
-      }
-      
-      // Check GitHub security features
-      try {
-        const securityFeaturesCheck = await checkSecurityFeatures(owner, repo);
-        
-        // Determine status based on enabled features
-        const allFeaturesEnabled = 
-          securityFeaturesCheck.secretScanningEnabled && 
-          securityFeaturesCheck.dependabotSecurityUpdatesEnabled && 
-          securityFeaturesCheck.codeqlEnabled;
-          
-        const someFeaturesEnabled = 
-          securityFeaturesCheck.secretScanningEnabled || 
-          securityFeaturesCheck.dependabotSecurityUpdatesEnabled || 
-          securityFeaturesCheck.codeqlEnabled;
-        
-        results['security-features-check'] = {
-          exists: true,
-          message: allFeaturesEnabled 
-            ? 'All security features are enabled' 
-            : someFeaturesEnabled 
-              ? 'Some security features are enabled, but not all'
-              : 'No security features are enabled',
-          status: allFeaturesEnabled ? 'success' : someFeaturesEnabled ? 'warning' : 'error',
-          location: 'repo',
-          securityFeatures: securityFeaturesCheck
-        };
-      } catch (error) {
-        console.error("Error checking security features:", error);
-        // Add a placeholder result
-        results['security-features-check'] = {
-          exists: false,
-          message: 'Unable to check security features',
-          status: 'warning',
-          location: 'none'
-        };
-      }
-      
-      // Check for telemetry files
-      try {
-        const telemetryCheck = await checkForTelemetryFiles(owner, repo);
-        
-        results['telemetry-check'] = {
-          exists: true,
-          message: telemetryCheck.containsTelemetry 
-            ? 'Telemetry/analytics files found in repository' 
-            : 'No telemetry or analytics files detected',
-          status: telemetryCheck.containsTelemetry ? 'warning' : 'success',
-          location: 'repo',
-          telemetryCheck: telemetryCheck
-        };
-      } catch (error) {
-        console.error("Error checking for telemetry files:", error);
-        // Add a placeholder result
-        results['telemetry-check'] = {
-          exists: false,
-          message: 'Unable to check for telemetry files',
-          status: 'warning',
-          location: 'none'
-        };
-      }
-      
-      // Check for ownership property
-      try {
-        const ownershipProperty = await checkOwnershipProperty(owner, repo);
-        
-        results['ownership-property-check'] = {
-          exists: true,
-          message: ownershipProperty.exists 
-            ? `Ownership property found: ${ownershipProperty.name}` 
-            : 'No ownership property set for this repository',
-          status: ownershipProperty.exists ? 'success' : 'warning',
-          location: 'repo',
-          ownershipProperty: ownershipProperty
-        };
-      } catch (error) {
-        console.error("Error checking for ownership property:", error);
-        // Add a placeholder result
-        results['ownership-property-check'] = {
-          exists: false,
-          message: 'Unable to check ownership property',
-          status: 'warning',
-          location: 'none'
-        };
-      }
-      
-      // Set validation summary
+      // Set validation summary with basic results first
       setValidationSummary({
         repoName: `${owner}/${repo}`,
         repoUrl: url,
@@ -443,6 +389,171 @@ function AppContent() {
         owner,
         repo
       });
+      
+      // Progressive loading approach - perform these intensive checks after displaying initial results
+      setTimeout(async () => {
+        try {
+          // Show a toast notification about progressive loading
+          toast.info("Loading additional repository data...", {
+            description: "We're gathering more information about the repository. This may take a moment."
+          });
+          
+          // Check rate limits again before making additional requests
+          const rateLimitCheck = await checkRateLimits();
+          if (!rateLimitCheck.ok && rateLimitCheck.remaining < 10) {
+            toast.warning(`Limiting additional checks due to API rate limits (${rateLimitCheck.remaining} remaining)`, {
+              description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${rateLimitCheck.resetTime}.`
+            });
+            
+            // Only update the validation summary with what we have already
+            setValidationSummary({
+              repoName: `${owner}/${repo}`,
+              repoUrl: url,
+              results,
+              missingRequired,
+              missingRecommended,
+              owner,
+              repo
+            });
+            return; // Skip the additional API-heavy checks
+          }
+          // Perform scan for internal references and confidential information
+          try {
+            const internalRefsCheck = await scanForInternalReferences(owner, repo);
+            
+            results['internal-references-check'] = {
+              exists: true,
+              message: internalRefsCheck.containsInternalRefs 
+                ? 'Found potential internal references or confidential information'
+                : 'No internal references or confidential information detected',
+              status: internalRefsCheck.containsInternalRefs ? 'warning' : 'success',
+              location: 'repo',
+              internalReferences: internalRefsCheck.issues
+            };
+          } catch (error) {
+            console.error("Error scanning for internal references:", error);
+            // Add a placeholder result
+            results['internal-references-check'] = {
+              exists: false,
+              message: 'Unable to scan for internal references',
+              status: 'warning',
+              location: 'none'
+            };
+          }
+          
+          // Check GitHub security features
+          try {
+            const securityFeaturesCheck = await checkSecurityFeatures(owner, repo);
+            
+            // Determine status based on enabled features
+            const allFeaturesEnabled = 
+              securityFeaturesCheck.secretScanningEnabled && 
+              securityFeaturesCheck.dependabotSecurityUpdatesEnabled && 
+              securityFeaturesCheck.codeqlEnabled;
+              
+            const someFeaturesEnabled = 
+              securityFeaturesCheck.secretScanningEnabled || 
+              securityFeaturesCheck.dependabotSecurityUpdatesEnabled || 
+              securityFeaturesCheck.codeqlEnabled;
+            
+            results['security-features-check'] = {
+              exists: true,
+              message: allFeaturesEnabled 
+                ? 'All security features are enabled' 
+                : someFeaturesEnabled 
+                  ? 'Some security features are enabled, but not all'
+                  : 'No security features are enabled',
+              status: allFeaturesEnabled ? 'success' : someFeaturesEnabled ? 'warning' : 'error',
+              location: 'repo',
+              securityFeatures: securityFeaturesCheck
+            };
+          } catch (error) {
+            console.error("Error checking security features:", error);
+            // Add a placeholder result
+            results['security-features-check'] = {
+              exists: false,
+              message: 'Unable to check security features',
+              status: 'warning',
+              location: 'none'
+            };
+          }
+          
+          // Check for telemetry files
+          try {
+            const telemetryCheck = await checkForTelemetryFiles(owner, repo);
+            
+            results['telemetry-check'] = {
+              exists: true,
+              message: telemetryCheck.containsTelemetry 
+                ? 'Telemetry/analytics files found in repository' 
+                : 'No telemetry or analytics files detected',
+              status: telemetryCheck.containsTelemetry ? 'warning' : 'success',
+              location: 'repo',
+              telemetryCheck: telemetryCheck
+            };
+          } catch (error) {
+            console.error("Error checking for telemetry files:", error);
+            // Add a placeholder result
+            results['telemetry-check'] = {
+              exists: false,
+              message: 'Unable to check for telemetry files',
+              status: 'warning',
+              location: 'none'
+            };
+          }
+          
+          // Check for ownership property
+          try {
+            const ownershipProperty = await checkOwnershipProperty(owner, repo);
+            
+            results['ownership-property-check'] = {
+              exists: true,
+              message: ownershipProperty.exists 
+                ? `Ownership property found: ${ownershipProperty.name}` 
+                : 'No ownership property set for this repository',
+              status: ownershipProperty.exists ? 'success' : 'warning',
+              location: 'repo',
+              ownershipProperty: ownershipProperty
+            };
+          } catch (error) {
+            console.error("Error checking for ownership property:", error);
+            // Add a placeholder result
+            results['ownership-property-check'] = {
+              exists: false,
+              message: 'Unable to check ownership property',
+              status: 'warning',
+              location: 'none'
+            };
+          }
+          
+          // Update validation summary with all results
+          setValidationSummary({
+            repoName: `${owner}/${repo}`,
+            repoUrl: url,
+            results,
+            missingRequired,
+            missingRecommended,
+            owner,
+            repo
+          });
+          
+          // Update rate limit info when all checks are complete
+          setRateLimitInfo(getCurrentRateLimit());
+          
+          // Notify user that all checks are complete
+          toast.success("Repository scan complete!", {
+            description: "All checks have been completed. Review the results below."
+          });
+          
+        } catch (err) {
+          console.error("Error in progressive loading:", err);
+          // Don't overwrite the main validation results if these additional checks fail
+          
+          toast.error("Some advanced checks couldn't be completed", {
+            description: "Basic validation is complete, but some detailed checks failed to run."
+          });
+        }
+      }, 100); // Small delay to let the UI update with initial results first
       
     } catch (err) {
       console.error("Validation error:", err);
@@ -608,13 +719,20 @@ function AppContent() {
                         Authenticated
                       </Badge>
                     )}
-                    <Badge 
-                      variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
-                      className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
-                    >
-                      <Gauge className="mr-1 h-3 w-3" />
-                      {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls remaining
-                    </Badge>
+                    {rateLimitInfo && (
+                      <Badge 
+                        variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
+                        className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
+                      >
+                        <Gauge className="mr-1 h-3 w-3" />
+                        {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls
+                        {rateLimitInfo.remaining < 20 && (
+                          <span className="ml-1">
+                            (resets {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})
+                          </span>
+                        )}
+                      </Badge>
+                    )}
                   </div>
                 )}
               </div>
@@ -692,9 +810,9 @@ function AppContent() {
                       <span>API Rate Limit Status:</span>
                       <span className={`font-medium ${rateLimitInfo.remaining < 10 ? 'text-amber-500' : rateLimitInfo.remaining < 5 ? 'text-destructive' : ''}`}>
                         {rateLimitInfo.remaining}/{rateLimitInfo.limit} requests remaining
-                        {rateLimitInfo.remaining < 10 && (
+                        {rateLimitInfo.remaining < 15 && (
                           <span className="ml-1">
-                            (resets at {rateLimitInfo.reset.toLocaleTimeString()})
+                            (resets at {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})
                           </span>
                         )}
                       </span>
@@ -716,7 +834,7 @@ function AppContent() {
                               <li>Authenticated users get 5,000 requests per hour</li>
                               <li>Complex repositories with many files may require multiple API calls</li>
                               {rateLimitInfo && (
-                                <li>Your rate limit will reset at {rateLimitInfo.reset.toLocaleTimeString()}</li>
+                                <li>Your rate limit will reset at {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</li>
                               )}
                               {!localStorage.getItem("github_access_token") && (
                                 <li className="mt-1 font-medium text-accent">
@@ -727,12 +845,12 @@ function AppContent() {
                                 </li>
                               )}
                             </ul>
-                            {!localStorage.getItem("github_access_token") && (
-                              <div className="mt-2 p-2 bg-card rounded">
+                            <div className="mt-2 p-2 bg-card rounded flex gap-2">
+                              {!localStorage.getItem("github_access_token") && (
                                 <Button 
                                   size="sm" 
                                   variant="outline"
-                                  className="w-full"
+                                  className="flex-1"
                                   onClick={() => {
                                     const patDialog = document.querySelector('[aria-label="API Token"]');
                                     if (patDialog) {
@@ -743,8 +861,19 @@ function AppContent() {
                                   <Key className="mr-2 h-4 w-4" />
                                   Add GitHub Token
                                 </Button>
-                              </div>
-                            )}
+                              )}
+                              <Button 
+                                size="sm" 
+                                variant={localStorage.getItem("github_access_token") ? "outline" : "default"}
+                                className={localStorage.getItem("github_access_token") ? "flex-1" : ""}
+                                onClick={() => {
+                                  if (url) handleValidate();
+                                }}
+                              >
+                                <MagnifyingGlass className="mr-2 h-4 w-4" />
+                                Retry Request
+                              </Button>
+                            </div>
                           </div>
                         )}
                         {error.includes("Authentication required") && (
