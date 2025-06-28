@@ -442,22 +442,24 @@ export async function rateRepoDescription(owner: string, repo: string): Promise<
       // Use LLM to analyze the description quality
       try {
         const prompt = spark.llmPrompt`
-          Rate the quality of this GitHub repository description: "${description}"
           
-          Consider:
-          1. Clarity - Does it clearly explain what the repository is for?
-          2. Completeness - Does it cover the key functionality and purpose?
-          3. Conciseness - Is it appropriately detailed without being verbose?
-          
-          Provide:
-          1. A rating of either "great", "good", "poor" (exactly one of these words)
-          2. A brief explanation of why you gave this rating (1-2 sentences)
-          
-          Format your response as JSON with two fields:
-          {
-            "rating": "great|good|poor",
-            "feedback": "explanation here"
-          }
+  Rate the quality of this GitHub repository description: "${description}"
+  
+  Consider:
+  1. Clarity - Does it clearly explain what the repository is for?
+  2. Completeness - Does it cover the key functionality and purpose?
+  3. Conciseness - Is it appropriately detailed without being verbose?
+  
+In a polite and helpful but firm tone provide:
+  1. A rating of either "great", "good", "poor" (exactly one of these words)
+  2. A brief explanation of why you gave this rating (1-2 sentences)
+  
+  Format your response as JSON with two fields:
+  {
+    "rating": "great|good|poor",
+    "feedback": "explanation here"
+  }
+
         `;
         
         const analysis = await spark.llm(prompt, "gpt-4o-mini", true);
@@ -547,32 +549,34 @@ export async function scanForInternalReferences(owner: string, repo: string): Pr
         
         // Use LLM to analyze the content for internal references
         const prompt = spark.llmPrompt`
-          Analyze this file content for a GitHub repository that will be open-sourced.
           
-          File path: ${filePath}
-          Content: ${content.substring(0, 4000)} ${content.length > 4000 ? '[content truncated for length]' : ''}
-          
-          Check for any of these concerning elements:
-          1. Internal company paths, tools, or codenames
-          2. Employee names or email aliases (especially internal patterns like username@company.internal)
-          3. API keys, tokens, or secrets
-          4. Internal URLs, hostnames, or IP addresses
-          5. References to proprietary or internal-only technology
-          6. Company confidential information
-          7. Trademarks or product icons/assets
-          8. References to not-yet-announced products or features
-          
-          If you find any concerning elements, provide:
-          1. A brief description of each issue found
-          2. The general location in the file (e.g., "API key in configuration section")
-          
-          Format your response as JSON:
-          {
-            "hasIssues": true|false,
-            "issues": ["issue description 1", "issue description 2", ...]
-          }
-          
-          If no issues are found, return {"hasIssues": false, "issues": []}.
+  Analyze this file content for a GitHub repository that will be open-sourced.
+  
+  File path: ${filePath}
+  Content: ${content.substring(0, 4000)} ${content.length > 4000 ? '[content truncated for length]' : ''}
+  
+  Check for any of these concerning elements:
+  1. Internal company paths, tools, or codenames
+  2. Employee names or email aliases (especially internal patterns like username@github)
+  3. API keys, tokens, or secrets
+  4. Internal URLs, hostnames, or IP addresses
+  5. References to proprietary or internal-only technology
+  6. Company confidential information
+  7. Trademarks or product icons/assets
+  8. References to not-yet-announced products or features
+  
+  If you find any concerning elements, provide:
+  1. A brief description of each issue found
+  2. The general location in the file (e.g., "API key in configuration section")
+  
+  Format your response as JSON:
+  {
+    "hasIssues": true|false,
+    "issues": ["issue description 1", "issue description 2", ...]
+  }
+  
+  If no issues are found, return {"hasIssues": false, "issues": []}.
+
         `;
         
         try {
