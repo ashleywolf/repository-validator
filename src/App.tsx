@@ -52,7 +52,6 @@ import {
   Gauge,
   UserCircle
 } from "@phosphor-icons/react";
-} from "@phosphor-icons/react";
 
 function AppContent() {
   const [url, setUrl] = useState("");
