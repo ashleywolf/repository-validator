@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   FileRequirement,
   ValidationSummary,
@@ -31,6 +31,7 @@ import { ThemeProvider } from "./context/theme-context";
 import { ThemeToggle } from "./components/theme-toggle";
 import { GitHubLogo } from "./components/github-logo";
 import { CreatePRButton } from "./components/create-pr-button";
+import { RepoAnalyzer } from "./components/repo-analyzer";
 import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +65,8 @@ import {
   ShieldWarning,
   Gauge,
   UserCircle,
-  Key
+  Key,
+  Brain
 } from "@phosphor-icons/react";
 
 function AppContent() {
@@ -118,9 +120,11 @@ function AppContent() {
         
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error("Repository not found or is private.");
+            throw new Error("Repository not found. The URL may be incorrect.");
           } else if (response.status === 403) {
             throw new Error(`GitHub API rate limit exceeded. Please try again later.`);
+          } else if (response.status === 401) {
+            throw new Error(`Authentication required. This is likely a private repository.`);
           } else {
             throw new Error(`GitHub API error: ${response.status}`);
           }
@@ -561,7 +565,7 @@ function AppContent() {
           <div className="absolute right-4 top-4 flex items-center gap-2">
             <Dialog>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8">
+                <Button variant="outline" size="sm" className="h-8" aria-label="API Token">
                   <Key className="h-4 w-4 mr-2" />
                   API Token
                 </Button>
@@ -575,9 +579,9 @@ function AppContent() {
             </Dialog>
             <ThemeToggle />
           </div>
-          <GitHubLogo size={120} className="mb-4" />
+          <GitHubLogo size={120} className="mb-4 animate-bounce-gentle" />
           <h1 className="text-3xl font-bold github-text py-2">GitHub OSS Compliance Checker</h1>
-          <h2 className="text-xl text-muted-foreground">Open Source Release Compliance Tool</h2>
+          <h2 className="text-xl text-muted-foreground">Open Source Repository Validator</h2>
         </div>
         <p className="text-muted-foreground max-w-2xl mx-auto">
           Validate your GitHub repository structure to ensure all
@@ -651,8 +655,7 @@ function AppContent() {
                   <div className="flex justify-between items-center">
                     <p className="flex items-center">
                       <Warning className="h-3 w-3 mr-1" />
-                      This tool works with public repositories and authenticated private repos. 
-                      {!localStorage.getItem("github_access_token") && "GitHub API has rate limits of 60 requests per hour for unauthenticated users."}
+                      This tool works with both public repositories and private repositories with authentication.
                     </p>
                     {localStorage.getItem("github_access_token") && (
                       <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30 h-5 ml-1 px-1">
@@ -661,6 +664,28 @@ function AppContent() {
                       </Badge>
                     )}
                   </div>
+                  
+                  {!localStorage.getItem("github_access_token") && (
+                    <div className="mt-1 pt-1 border-t border-border/30">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">Private repository access:</span>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 text-xs py-0 px-2 text-primary"
+                          onClick={() => {
+                            const patDialog = document.querySelector('[aria-label="API Token"]');
+                            if (patDialog) {
+                              (patDialog as HTMLButtonElement).click();
+                            }
+                          }}
+                        >
+                          <Key className="h-3 w-3 mr-1" />
+                          Add API Token
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   
                   {rateLimitInfo && (
                     <div className="mt-1 pt-1 border-t border-border/30 flex justify-between">
@@ -688,8 +713,11 @@ function AppContent() {
                             <p>GitHub API rate limiting impacts your ability to scan repositories:</p>
                             <ul className="list-disc pl-4 mt-1">
                               <li>Unauthenticated users are limited to 60 requests per hour</li>
+                              <li>Authenticated users get 5,000 requests per hour</li>
                               <li>Complex repositories with many files may require multiple API calls</li>
-                              <li>Try again after the rate limit reset time mentioned above</li>
+                              {rateLimitInfo && (
+                                <li>Your rate limit will reset at {rateLimitInfo.reset.toLocaleTimeString()}</li>
+                              )}
                               {!localStorage.getItem("github_access_token") && (
                                 <li className="mt-1 font-medium text-accent">
                                   <span className="flex items-center">
@@ -698,20 +726,51 @@ function AppContent() {
                                   </span>
                                 </li>
                               )}
-                              {rateLimitInfo && rateLimitInfo.remaining < 5 && (
-                                <li className="mt-1 font-medium">You have only {rateLimitInfo.remaining} requests remaining until {rateLimitInfo.reset.toLocaleTimeString()}</li>
-                              )}
                             </ul>
+                            {!localStorage.getItem("github_access_token") && (
+                              <div className="mt-2 p-2 bg-card rounded">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="w-full"
+                                  onClick={() => {
+                                    const patDialog = document.querySelector('[aria-label="API Token"]');
+                                    if (patDialog) {
+                                      (patDialog as HTMLButtonElement).click();
+                                    }
+                                  }}
+                                >
+                                  <Key className="mr-2 h-4 w-4" />
+                                  Add GitHub Token
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         )}
-                        {error.includes("Authentication error (401)") && (
+                        {error.includes("Authentication required") && (
                           <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                            <p>This could mean:</p>
+                            <p>This repository appears to be private and requires authentication:</p>
                             <ul className="list-disc pl-4 mt-1">
-                              <li>The repository URL is incorrect</li>
-                              <li>The repository is private and cannot be accessed</li>
-                              <li>GitHub API rate limiting (try again later)</li>
+                              <li>Verify the repository URL is correct</li>
+                              <li>Click the "API Token" button at the top right to add a GitHub Personal Access Token</li>
+                              <li>Your token needs repo scope and SSO authorization if the repo is in an organization</li>
                             </ul>
+                            <div className="mt-2 p-2 bg-card rounded">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                  const patDialog = document.querySelector('[aria-label="API Token"]');
+                                  if (patDialog) {
+                                    (patDialog as HTMLButtonElement).click();
+                                  }
+                                }}
+                              >
+                                <Key className="mr-2 h-4 w-4" />
+                                Add GitHub Token
+                              </Button>
+                            </div>
                           </div>
                         )}
                         {error.includes("Repository not found") && (
@@ -781,8 +840,13 @@ function AppContent() {
                 </CardContent>
               </Card>
               
+              {/* Repository Analysis Card - uses LLM to analyze the repo */}
+              {validationSummary && (
+                <RepoAnalyzer repoUrl={validationSummary.repoUrl} />
+              )}
+              
               {/* File Validation Results Card */}
-              <Card className="github-card github-glow">
+              <Card className="github-card github-glow mt-6">
                 <CardHeader>
                   <CardTitle className="flex justify-between">
                     <span>Validation Results</span>

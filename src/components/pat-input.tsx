@@ -119,6 +119,12 @@ export const PatInput: React.FC = () => {
           <li>After creating the token, click "Configure SSO" and authorize your organization</li>
           <li>Copy the token and paste it here</li>
         </ol>
+        <div className="mt-2 pt-2 border-t border-border/30">
+          <p className="text-muted-foreground text-xs italic flex items-center">
+            <Info className="h-3 w-3 mr-1" />
+            Tokens are stored securely in your browser's local storage and only sent to GitHub APIs
+          </p>
+        </div>
       </div>
     </div>
   );
