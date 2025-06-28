@@ -22,7 +22,8 @@ import {
   TelemetryCheck,
   checkOwnershipProperty,
   OwnershipProperty,
-  clearGitHubRequestCache
+  clearGitHubRequestCache,
+  checkRateLimits
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -642,7 +643,6 @@ function AppContent() {
                 </div>
                 <div className="flex items-center gap-2">
                 </div>
-                )}
               </div>
             </CardHeader>
             <CardContent>
