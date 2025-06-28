@@ -443,22 +443,26 @@ export async function rateRepoDescription(owner: string, repo: string): Promise<
       try {
         const prompt = spark.llmPrompt`
           
-  Rate the quality of this GitHub repository description: "${description}"
   
-  Consider:
-  1. Clarity - Does it clearly explain what the repository is for?
-  2. Completeness - Does it cover the key functionality and purpose?
-  3. Conciseness - Is it appropriately detailed without being verbose?
   
-In a polite and helpful but firm tone provide:
-  1. A rating of either "great", "good", "poor" (exactly one of these words)
-  2. A brief explanation of why you gave this rating (1-2 sentences)
-  
-  Format your response as JSON with two fields:
-  {
-    "rating": "great|good|poor",
-    "feedback": "explanation here"
-  }
+Rate the quality of this GitHub repository description: "${description}"
+
+Consider:
+1. Clarity - Does it clearly explain what the repository is for?
+2. Completeness - Does it cover the key functionality and purpose?
+3. Conciseness - Is it appropriately detailed without being verbose?
+
+In a polite and helpful tone provide:
+1. A rating of either "great", "good", "poor" (exactly one of these words)
+2. A brief explanation of why you gave this rating (1-2 sentences)
+
+Format your response as JSON with two fields:
+{
+"rating": "great|good|poor",
+"feedback": "explanation here"
+}
+
+
 
         `;
         
