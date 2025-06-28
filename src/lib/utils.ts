@@ -468,8 +468,11 @@ export function addAuthHeaders(): Record<string, string> {
   // Add a user-agent to help with rate limiting
   headers['User-Agent'] = 'GitHub-Open-Source-Checker';
   
-  // No authentication is being used - the app now works with public repositories only
-  // This simplifies the experience and prevents authentication errors
+  // Add authentication token if available - improves rate limits and allows access to private repos
+  const token = localStorage.getItem("github_access_token");
+  if (token) {
+    headers['Authorization'] = `token ${token}`;
+  }
   
   return headers;
 }

@@ -38,6 +38,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAuth } from "./context/auth-context";
+import { GitHubAuth } from "./components/github-auth";
+import { AuthProvider } from "./context/auth-context";
+import { PatInput } from "./components/pat-input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { 
   GithubLogo, 
   MagnifyingGlass, 
@@ -52,7 +63,8 @@ import {
   ShieldCheck,
   ShieldWarning,
   Gauge,
-  UserCircle
+  UserCircle,
+  Key
 } from "@phosphor-icons/react";
 
 function AppContent() {
@@ -546,7 +558,21 @@ function AppContent() {
     <div className="container mx-auto py-10 px-4">
       <header className="text-center mb-10">
         <div className="flex flex-col items-center justify-center mb-4">
-          <div className="absolute right-4 top-4">
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8">
+                  <Key className="h-4 w-4 mr-2" />
+                  API Token
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>GitHub Personal Access Token</DialogTitle>
+                </DialogHeader>
+                <PatInput />
+              </DialogContent>
+            </Dialog>
             <ThemeToggle />
           </div>
           <GitHubLogo size={120} className="mb-4" />
@@ -571,13 +597,21 @@ function AppContent() {
                   </CardDescription>
                 </div>
                 {rateLimitInfo && (
-                  <Badge 
-                    variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
-                    className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
-                  >
-                    <Gauge className="mr-1 h-3 w-3" />
-                    {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls remaining
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {localStorage.getItem("github_access_token") && (
+                      <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30">
+                        <Key className="mr-1 h-3 w-3" />
+                        Authenticated
+                      </Badge>
+                    )}
+                    <Badge 
+                      variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
+                      className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
+                    >
+                      <Gauge className="mr-1 h-3 w-3" />
+                      {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls remaining
+                    </Badge>
+                  </div>
                 )}
               </div>
             </CardHeader>
@@ -617,8 +651,15 @@ function AppContent() {
                   <div className="flex justify-between items-center">
                     <p className="flex items-center">
                       <Warning className="h-3 w-3 mr-1" />
-                      This tool only works with public repositories. GitHub API has rate limits of 60 requests per hour.
+                      This tool works with public repositories and authenticated private repos. 
+                      {!localStorage.getItem("github_access_token") && "GitHub API has rate limits of 60 requests per hour for unauthenticated users."}
                     </p>
+                    {localStorage.getItem("github_access_token") && (
+                      <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30 h-5 ml-1 px-1">
+                        <Key className="h-3 w-3 mr-1" />
+                        <span className="text-xs">API Token Active</span>
+                      </Badge>
+                    )}
                   </div>
                   
                   {rateLimitInfo && (
@@ -649,6 +690,14 @@ function AppContent() {
                               <li>Unauthenticated users are limited to 60 requests per hour</li>
                               <li>Complex repositories with many files may require multiple API calls</li>
                               <li>Try again after the rate limit reset time mentioned above</li>
+                              {!localStorage.getItem("github_access_token") && (
+                                <li className="mt-1 font-medium text-accent">
+                                  <span className="flex items-center">
+                                    <Key className="h-3 w-3 mr-1" />
+                                    Add a GitHub API token to increase your rate limit to 5,000 requests per hour
+                                  </span>
+                                </li>
+                              )}
                               {rateLimitInfo && rateLimitInfo.remaining < 5 && (
                                 <li className="mt-1 font-medium">You have only {rateLimitInfo.remaining} requests remaining until {rateLimitInfo.reset.toLocaleTimeString()}</li>
                               )}
@@ -1254,10 +1303,12 @@ git push -f origin main
 
 function App() {
   return (
-    <ThemeProvider>
-      <AppContent />
-      <Toaster position="top-right" />
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <AppContent />
+        <Toaster position="top-right" />
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
 
