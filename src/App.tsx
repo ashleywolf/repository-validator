@@ -335,7 +335,7 @@ function AppContent() {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
-          errorMessage = "Authentication required. This is likely a private repository.";
+          errorMessage = "Authentication error (401). This may be due to API rate limiting or the repository requires authentication.";
         } else if (errorMessage.includes("GitHub API error: 403")) {
           errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
         } else if (errorMessage.includes("GitHub API error: 404")) {
@@ -512,6 +512,16 @@ function AppContent() {
                       {error.includes("API rate limit exceeded") && (
                         <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
                           <p>GitHub limits unauthenticated requests to 60 per hour. Please try again later.</p>
+                        </div>
+                      )}
+                      {error.includes("Authentication error (401)") && (
+                        <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
+                          <p>This may be due to:</p>
+                          <ul className="list-disc pl-4 mt-1">
+                            <li>GitHub API rate limiting (try again later)</li>
+                            <li>The repository URL is incorrect</li>
+                            <li>The repository exists but requires authentication</li>
+                          </ul>
                         </div>
                       )}
                       {error.includes("Repository not found") && (
