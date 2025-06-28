@@ -21,7 +21,9 @@ import {
   checkForTelemetryFiles,
   TelemetryCheck,
   checkOwnershipProperty,
-  OwnershipProperty
+  OwnershipProperty,
+  getCurrentRateLimit,
+  RateLimitInfo
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -62,6 +64,7 @@ function AppContent() {
   const [selectedTemplate, setSelectedTemplate] = useState<FileTemplate | null>(null);
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [descriptionRating, setDescriptionRating] = useState<DescriptionRating | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo | null>(null);
   
   // Handle URL validation and repo scanning
   const handleValidate = async () => {
@@ -98,11 +101,14 @@ function AppContent() {
       try {
         const response = await makeGitHubRequest(apiUrl);
         
+        // Update rate limit info after request
+        setRateLimitInfo(getCurrentRateLimit());
+        
         if (!response.ok) {
           if (response.status === 404) {
             throw new Error("Repository not found or is private.");
           } else if (response.status === 403) {
-            throw new Error("API rate limit exceeded.");
+            throw new Error(`GitHub API rate limit exceeded. Please try again later.`);
           } else {
             throw new Error(`GitHub API error: ${response.status}`);
           }
@@ -426,13 +432,20 @@ function AppContent() {
       console.error("Validation error:", err);
       let errorMessage = "An unknown error occurred";
       
+      // Update rate limit info in case of error too
+      setRateLimitInfo(getCurrentRateLimit());
+      
       if (err instanceof Error) {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
           errorMessage = "Authentication error (401). This repository may be private or doesn't exist.";
-        } else if (errorMessage.includes("GitHub API error: 403")) {
-          errorMessage = "Access forbidden (403). You have likely exceeded GitHub's API rate limits (60 requests per hour).";
+        } else if (errorMessage.includes("GitHub API error: 403") || errorMessage.includes("rate limit exceeded")) {
+          // Enhanced rate limit error message
+          const resetTime = getCurrentRateLimit()?.reset 
+            ? getCurrentRateLimit()?.reset.toLocaleTimeString() 
+            : 'an hour';
+          errorMessage = `Rate limit exceeded. GitHub limits API requests to 60 per hour for unauthenticated users. Limit resets at approximately ${resetTime}.`;
         } else if (errorMessage.includes("GitHub API error: 404")) {
           errorMessage = "Repository not found (404). Please check that the URL is correct and the repository exists.";
         } else if (errorMessage.includes("GitHub API error: 500")) {
@@ -557,6 +570,15 @@ function AppContent() {
                     Enter a GitHub repository URL to begin validation
                   </CardDescription>
                 </div>
+                {rateLimitInfo && (
+                  <Badge 
+                    variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
+                    className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
+                  >
+                    <Gauge className="mr-1 h-3 w-3" />
+                    {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls remaining
+                  </Badge>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -591,11 +613,27 @@ function AppContent() {
                 </div>
                 
                 {/* Rate limit info alert */}
-                <div className="flex justify-between items-center text-xs text-muted-foreground bg-secondary/30 p-2 rounded">
-                  <p className="flex items-center">
-                    <Warning className="h-3 w-3 mr-1" />
-                    This tool only works with public repositories. GitHub API has rate limits of 60 requests per hour.
-                  </p>
+                <div className="flex flex-col text-xs text-muted-foreground bg-secondary/30 p-2 rounded">
+                  <div className="flex justify-between items-center">
+                    <p className="flex items-center">
+                      <Warning className="h-3 w-3 mr-1" />
+                      This tool only works with public repositories. GitHub API has rate limits of 60 requests per hour.
+                    </p>
+                  </div>
+                  
+                  {rateLimitInfo && (
+                    <div className="mt-1 pt-1 border-t border-border/30 flex justify-between">
+                      <span>API Rate Limit Status:</span>
+                      <span className={`font-medium ${rateLimitInfo.remaining < 10 ? 'text-amber-500' : rateLimitInfo.remaining < 5 ? 'text-destructive' : ''}`}>
+                        {rateLimitInfo.remaining}/{rateLimitInfo.limit} requests remaining
+                        {rateLimitInfo.remaining < 10 && (
+                          <span className="ml-1">
+                            (resets at {rateLimitInfo.reset.toLocaleTimeString()})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 
                   {error && (
@@ -604,9 +642,17 @@ function AppContent() {
                       <AlertTitle>Repository Access Error</AlertTitle>
                       <AlertDescription>
                         {error}
-                        {error.includes("API rate limit exceeded") && (
+                        {error.includes("Rate limit exceeded") && (
                           <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                            <p>GitHub limits API requests to 60 per hour for unauthenticated users. Please try again later.</p>
+                            <p>GitHub API rate limiting impacts your ability to scan repositories:</p>
+                            <ul className="list-disc pl-4 mt-1">
+                              <li>Unauthenticated users are limited to 60 requests per hour</li>
+                              <li>Complex repositories with many files may require multiple API calls</li>
+                              <li>Try again after the rate limit reset time mentioned above</li>
+                              {rateLimitInfo && rateLimitInfo.remaining < 5 && (
+                                <li className="mt-1 font-medium">You have only {rateLimitInfo.remaining} requests remaining until {rateLimitInfo.reset.toLocaleTimeString()}</li>
+                              )}
+                            </ul>
                           </div>
                         )}
                         {error.includes("Authentication error (401)") && (

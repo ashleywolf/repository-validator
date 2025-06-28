@@ -376,7 +376,23 @@ export async function analyzeDependencies(fileUrl: string): Promise<DependencyAn
   }
 }
 
-// Helper function to make GitHub API requests with retries and auth handling
+// Store rate limit information
+export type RateLimitInfo = {
+  limit: number;
+  remaining: number;
+  reset: Date;
+  used: number;
+}
+
+// Global variable to store the latest rate limit information
+let currentRateLimit: RateLimitInfo | null = null;
+
+// Function to get current rate limit info
+export function getCurrentRateLimit(): RateLimitInfo | null {
+  return currentRateLimit;
+}
+
+// Helper function to make GitHub API requests with retries and rate limit handling
 export async function makeGitHubRequest(url: string, maxRetries = 2): Promise<Response> {
   let retries = 0;
   let lastError: Error | null = null;
@@ -386,13 +402,38 @@ export async function makeGitHubRequest(url: string, maxRetries = 2): Promise<Re
       const headers = addAuthHeaders();
       const response = await fetch(url, { headers });
       
-      // If we get rate limited, try to get a new auth token
-      if (response.status === 403 && retries < maxRetries) {
-        console.warn(`Rate limited (403) on attempt ${retries + 1}. Retrying with new auth if available...`);
-        // Wait a bit before retrying (increasing backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
-        retries++;
-        continue;
+      // Extract and store rate limit information from headers
+      try {
+        const rateLimit = {
+          limit: parseInt(response.headers.get('x-ratelimit-limit') || '60', 10),
+          remaining: parseInt(response.headers.get('x-ratelimit-remaining') || '0', 10),
+          reset: new Date(parseInt(response.headers.get('x-ratelimit-reset') || '0', 10) * 1000),
+          used: parseInt(response.headers.get('x-ratelimit-used') || '0', 10)
+        };
+        currentRateLimit = rateLimit;
+        
+        // Log rate limit info for debugging
+        console.info(`Rate limit: ${rateLimit.remaining}/${rateLimit.limit}, resets at ${rateLimit.reset.toLocaleTimeString()}`);
+      } catch (e) {
+        console.warn('Failed to parse rate limit headers:', e);
+      }
+      
+      // If we get rate limited, check the retry strategy
+      if (response.status === 403) {
+        const retryAfterHeader = response.headers.get('retry-after');
+        const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : null;
+        
+        if (retries < maxRetries) {
+          const waitTime = retryAfter || 1000 * Math.pow(2, retries + 1); // Exponential backoff if no retry-after
+          console.warn(`Rate limited (403) on attempt ${retries + 1}. Waiting ${waitTime/1000}s before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          retries++;
+          continue;
+        } else {
+          // If we've exhausted retries, throw with clear rate limit info
+          const resetTime = currentRateLimit?.reset ? currentRateLimit.reset.toLocaleTimeString() : 'unknown time';
+          throw new Error(`GitHub API rate limit exceeded. Limit resets at ${resetTime}.`);
+        }
       }
       
       return response;
@@ -402,7 +443,9 @@ export async function makeGitHubRequest(url: string, maxRetries = 2): Promise<Re
       
       if (retries < maxRetries) {
         // Wait a bit before retrying (increasing backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+        const waitTime = 1000 * Math.pow(2, retries);
+        console.warn(`Waiting ${waitTime/1000}s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
         retries++;
         continue;
       }
