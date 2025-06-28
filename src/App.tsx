@@ -42,11 +42,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useAuth } from "./context/auth-context";
-import { GitHubAuth } from "./components/github-auth";
-import { AuthProvider } from "./context/auth-context";
-import { PatInput } from "./components/pat-input";
-import { TestApiButton } from "./components/test-api-button";
 import {
   Dialog,
   DialogContent,
@@ -129,12 +124,10 @@ function AppContent() {
         
         // Show warning if rates are getting low, but only if we have accurate rate info
         if (!rateLimitCheck.ok && rateLimitCheck.remaining < 15) {
-          const message = rateLimitCheck.isAuthenticated 
-            ? `You're close to the GitHub API rate limit (${rateLimitCheck.remaining} requests remaining)`
-            : `GitHub API rate limit is low (${rateLimitCheck.remaining}/60 requests remaining)`;
+          const message = `GitHub API rate limit is low (${rateLimitCheck.remaining}/60 requests remaining)`;
             
           toast.warning(message, {
-            description: `Rate limits reset at ${rateLimitCheck.resetTime}. ${!rateLimitCheck.isAuthenticated ? 'Consider adding a GitHub token for higher limits.' : ''}`,
+            description: `Rate limits reset at ${rateLimitCheck.resetTime}.`,
             duration: 6000
           });
         }
@@ -178,12 +171,11 @@ function AppContent() {
         // Show a toast notification about rate limits if we're getting low
         const rateLimit = getCurrentRateLimit();
         if (rateLimit && rateLimit.remaining !== undefined && rateLimit.remaining < 20) {
-          const isAuthenticated = !!localStorage.getItem("github_access_token");
           const resetTime = rateLimit.reset.toLocaleTimeString();
           
           if (rateLimit.remaining < 5) {
             toast.warning(`API rate limit is very low: ${rateLimit.remaining} requests remaining`, {
-              description: `Rate limit will reset at ${resetTime}. ${!isAuthenticated ? "Consider adding an API token." : ""}`
+              description: `Rate limit will reset at ${resetTime}.`
             });
           } else if (rateLimit.remaining < 10) {
             toast.info(`API rate limit notice: ${rateLimit.remaining} requests remaining`, {
@@ -770,12 +762,6 @@ function AppContent() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  {localStorage.getItem("github_access_token") && (
-                    <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30">
-                      <Key className="mr-1 h-3 w-3" />
-                      Authenticated
-                    </Badge>
-                  )}
                   {rateLimitInfo && rateLimitInfo.remaining !== undefined && (
                     <Badge 
                       variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
@@ -1497,12 +1483,10 @@ git push -f origin main
 
 function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <AppContent />
-        <Toaster position="top-right" />
-      </ThemeProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AppContent />
+      <Toaster position="top-right" />
+    </ThemeProvider>
   );
 }
 

@@ -410,7 +410,6 @@ export async function checkRateLimits(): Promise<{
   ok: boolean;
   remaining: number;
   resetTime: string;
-  isAuthenticated: boolean;
 }> {
   try {
     // First check if we have a cached or already obtained rate limit info
@@ -421,8 +420,7 @@ export async function checkRateLimits(): Promise<{
         return {
           ok: currentRateLimit.remaining > 10,
           remaining: currentRateLimit.remaining,
-          resetTime: currentRateLimit.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-          isAuthenticated: currentRateLimit.limit > 60
+          resetTime: currentRateLimit.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         };
       }
     }
@@ -459,8 +457,7 @@ export async function checkRateLimits(): Promise<{
       return {
         ok: coreLimit.remaining > 10, // Consider "ok" if we have more than 10 requests left
         remaining: coreLimit.remaining,
-        resetTime: new Date(coreLimit.reset * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        isAuthenticated: coreLimit.limit > 60 // If limit is > 60, we're authenticated
+        resetTime: new Date(coreLimit.reset * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
       };
     } catch (error) {
       console.warn("Error checking rate limits directly:", error);
@@ -473,8 +470,7 @@ export async function checkRateLimits(): Promise<{
         return {
           ok: true,
           remaining: 20,
-          resetTime: new Date(Date.now() + 3600000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-          isAuthenticated: !!localStorage.getItem("github_access_token")
+          resetTime: new Date(Date.now() + 3600000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         };
       }
       
@@ -754,15 +750,8 @@ export function addAuthHeaders(): Record<string, string> {
   // Add a user-agent to help with rate limiting
   headers['User-Agent'] = 'GitHub-Open-Source-Checker';
   
-  // For public repos, we don't need authentication
-  // But we'll still use the token if available to improve rate limits
-  const token = localStorage.getItem("github_access_token");
-  if (token) {
-    headers['Authorization'] = `token ${token}`;
-    console.info('Using authenticated GitHub API request (higher rate limits)');
-  } else {
-    console.info('Using unauthenticated GitHub API request (public repos only)');
-  }
+  // We only support public repositories without authentication
+  console.info('Using unauthenticated GitHub API request (public repos only)');
   
   return headers;
 }
