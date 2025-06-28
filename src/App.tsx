@@ -22,11 +22,7 @@ import {
   TelemetryCheck,
   checkOwnershipProperty,
   OwnershipProperty,
-  getCurrentRateLimit,
-  RateLimitInfo,
-  checkRateLimits,
-  clearGitHubRequestCache,
-  isRateLimitError
+  clearGitHubRequestCache
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -77,7 +73,6 @@ function AppContent() {
   const [selectedTemplate, setSelectedTemplate] = useState<FileTemplate | null>(null);
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [descriptionRating, setDescriptionRating] = useState<DescriptionRating | null>(null);
-  const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo | null>(null);
   
   // Handle URL validation and repo scanning
   const handleValidate = async () => {
@@ -113,36 +108,11 @@ function AppContent() {
       
       let repoContents;
       
-      // Check rate limits before making main request
-      try {
-        const rateLimitCheck = await checkRateLimits();
-        
-        // Update UI with rate limit info
-        if (getCurrentRateLimit()) {
-          setRateLimitInfo(getCurrentRateLimit());
-        }
-        
-        // Show warning if rates are getting low, but only if we have accurate rate info
-        if (!rateLimitCheck.ok && rateLimitCheck.remaining < 15) {
-          const message = `GitHub API rate limit is low (${rateLimitCheck.remaining}/60 requests remaining)`;
-            
-          toast.warning(message, {
-            description: `Rate limits reset at ${rateLimitCheck.resetTime}.`,
-            duration: 6000
-          });
-        }
-      } catch (error) {
-        // If rate limit check fails, don't block the main validation
-        // This improves reliability for public repos even if rate check fails
-        console.warn("Rate limit check failed, continuing anyway:", error);
-      }
+      // Skip rate limit check for better public repo access
       
       // Use the makeGitHubRequest helper with retries, auth handling and caching
       try {
         const response = await makeGitHubRequest(apiUrl);
-        
-        // Update rate limit info after request
-        setRateLimitInfo(getCurrentRateLimit());
         
         if (!response.ok) {
           if (response.status === 404) {
@@ -167,22 +137,6 @@ function AppContent() {
         }
         
         repoContents = await response.json();
-        
-        // Show a toast notification about rate limits if we're getting low
-        const rateLimit = getCurrentRateLimit();
-        if (rateLimit && rateLimit.remaining !== undefined && rateLimit.remaining < 20) {
-          const resetTime = rateLimit.reset.toLocaleTimeString();
-          
-          if (rateLimit.remaining < 5) {
-            toast.warning(`API rate limit is very low: ${rateLimit.remaining} requests remaining`, {
-              description: `Rate limit will reset at ${resetTime}.`
-            });
-          } else if (rateLimit.remaining < 10) {
-            toast.info(`API rate limit notice: ${rateLimit.remaining} requests remaining`, {
-              description: `Rate limit will reset at ${resetTime}`
-            });
-          }
-        }
       } catch (error) {
         console.error("Error fetching repository contents:", error);
         throw error;
@@ -393,34 +347,13 @@ function AppContent() {
         repo
       });
       
-      // Check if we should do additional checks based on rate limits
-      const rateLimitCheck = await checkRateLimits();
-      
-      // If we have accurate rate limit info and we're close to limits, warn and skip detailed checks
-      if (!rateLimitCheck.ok && rateLimitCheck.remaining !== undefined && rateLimitCheck.remaining < 10) {
-        toast.warning(`Limiting detailed checks due to API rate limits (${rateLimitCheck.remaining} remaining)`, {
-          description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${rateLimitCheck.resetTime}.`,
-          duration: 8000
-        });
-      } else {
-        // Progressive loading approach for additional checks
-        setTimeout(async () => {
-          try {
-            // Show a toast notification about progressive loading
-            toast.info("Loading additional repository data...", {
-              description: "We're gathering more information about the repository. This may take a moment."
-            });
-            
-            // Check rate limits again before making additional requests
-            const secondRateLimitCheck = await checkRateLimits();
-            if (!secondRateLimitCheck.ok && secondRateLimitCheck.remaining !== undefined && secondRateLimitCheck.remaining < 10) {
-              toast.warning(`Limiting additional checks due to API rate limits (${secondRateLimitCheck.remaining} remaining)`, {
-                description: `Some detailed checks will be skipped to conserve remaining API calls. Rate limits reset at ${secondRateLimitCheck.resetTime}.`
-              });
-              
-              // Skip the additional API-heavy checks
-              return;
-            }
+      // Progressive loading approach for additional checks
+      setTimeout(async () => {
+        try {
+          // Show a toast notification about progressive loading
+          toast.info("Loading additional repository data...", {
+            description: "We're gathering more information about the repository. This may take a moment."
+          });
             
             // Perform these checks in parallel to speed up the process
             const checks = [];
@@ -531,10 +464,9 @@ function AppContent() {
               }
             })());
             
-            // Internal references check (most API intensive, do last)
-            if (secondRateLimitCheck.remaining === undefined || secondRateLimitCheck.remaining > 15) {
-              checks.push((async () => {
-                try {
+            // Internal references check
+            checks.push((async () => {
+              try {
                   const internalRefsCheck = await scanForInternalReferences(owner, repo);
                   
                   return {
@@ -562,13 +494,6 @@ function AppContent() {
                   };
                 }
               })());
-            } else {
-              // Skip internal references check if rate limits are low
-              toast.info("Skipping internal references check due to API rate limits", {
-                description: "This check requires multiple API calls and has been skipped to avoid hitting rate limits."
-              });
-            }
-            
             // Execute all checks in parallel
             const checkResults = await Promise.allSettled(checks);
             
@@ -590,9 +515,6 @@ function AppContent() {
               repo
             });
             
-            // Update rate limit info when all checks are complete
-            setRateLimitInfo(getCurrentRateLimit());
-            
             // Notify user that all checks are complete
             toast.success("Repository scan complete!", {
               description: "All checks have been completed. Review the results below."
@@ -607,14 +529,10 @@ function AppContent() {
             });
           }
         }, 100); // Small delay to let the UI update with initial results first
-      }
       
     } catch (err) {
       console.error("Validation error:", err);
       let errorMessage = "An unknown error occurred";
-      
-      // Update rate limit info in case of error too
-      setRateLimitInfo(getCurrentRateLimit());
       
       if (err instanceof Error) {
         errorMessage = err.message;
@@ -622,21 +540,9 @@ function AppContent() {
         if (errorMessage.includes("GitHub API error: 401")) {
           errorMessage = "Repository not found or inaccessible. Please verify the URL is correct and the repository is public.";
         } else if (errorMessage.includes("GitHub API error: 403")) {
-          if (errorMessage.includes("rate limit exceeded")) {
-            // Enhanced rate limit error message
-            const resetTime = getCurrentRateLimit()?.reset 
-              ? getCurrentRateLimit()?.reset.toLocaleTimeString() 
-              : 'an hour';
-            errorMessage = `Rate limit exceeded. GitHub limits API requests to 60 per hour for unauthenticated users. Limit resets at approximately ${resetTime}.`;
-          } else {
-            errorMessage = "Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.";
-          }
+          errorMessage = "Access forbidden (403). Please try again in a few minutes.";
         } else if (errorMessage.includes("rate limit exceeded")) {
-          // Enhanced rate limit error message
-          const resetTime = getCurrentRateLimit()?.reset 
-            ? getCurrentRateLimit()?.reset.toLocaleTimeString() 
-            : 'an hour';
-          errorMessage = `Rate limit exceeded. GitHub limits API requests to 60 per hour for unauthenticated users. Limit resets at approximately ${resetTime}.`;
+          errorMessage = "The GitHub API is temporarily unavailable. Please try again in a few minutes.";
         } else if (errorMessage.includes("GitHub API error: 404")) {
           errorMessage = "Repository not found (404). Please check that the URL is correct and the repository exists.";
         } else if (errorMessage.includes("GitHub API error: 500")) {
@@ -762,21 +668,7 @@ function AppContent() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  {rateLimitInfo && rateLimitInfo.remaining !== undefined && (
-                    <Badge 
-                      variant={rateLimitInfo.remaining < 5 ? "destructive" : rateLimitInfo.remaining < 15 ? "outline" : "default"}
-                      className={rateLimitInfo.remaining < 15 && rateLimitInfo.remaining >= 5 ? "border-amber-500 text-amber-500" : ""}
-                    >
-                      <Gauge className="mr-1 h-3 w-3" />
-                      {rateLimitInfo.remaining}/{rateLimitInfo.limit} API calls
-                      {rateLimitInfo.remaining < 20 && (
-                        <span className="ml-1">
-                            (resets {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})
-                          </span>
-                        )}
-                      </Badge>
-                    )}
-                  </div>
+                </div>
                 )}
               </div>
             </CardHeader>
@@ -819,20 +711,6 @@ function AppContent() {
                       This tool works with public GitHub repositories
                     </p>
                   </div>
-                  
-                  {rateLimitInfo && rateLimitInfo.remaining !== undefined && (
-                    <div className="mt-1 pt-1 border-t border-border/30 flex justify-between">
-                      <span>API Rate Limit Status:</span>
-                      <span className={`font-medium ${rateLimitInfo.remaining < 10 ? 'text-amber-500' : rateLimitInfo.remaining < 5 ? 'text-destructive' : ''}`}>
-                        {rateLimitInfo.remaining}/{rateLimitInfo.limit} requests remaining
-                        {rateLimitInfo.remaining < 15 && rateLimitInfo.reset && (
-                          <span className="ml-1">
-                            (resets at {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  )}
                 </div>
                 
                   {error && (
@@ -843,13 +721,10 @@ function AppContent() {
                         {error}
                         {error.includes("Rate limit exceeded") && (
                           <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                            <p>GitHub API rate limiting impacts your ability to scan repositories:</p>
+                            <p>The application cannot access the GitHub API right now:</p>
                             <ul className="list-disc pl-4 mt-1">
-                              <li>Unauthenticated users are limited to 60 requests per hour</li>
-                              <li>Complex repositories with many files may require multiple API calls</li>
-                              {rateLimitInfo && (
-                                <li>Your rate limit will reset at {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</li>
-                              )}
+                              <li>The API request limit has been temporarily reached</li>
+                              <li>Please try again in a few minutes</li>
                             </ul>
                             <div className="mt-2 p-2 bg-card rounded flex gap-2">
                               <Button 
