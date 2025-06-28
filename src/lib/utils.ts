@@ -637,7 +637,8 @@ export async function makeGitHubRequest(url: string, maxRetries = 3): Promise<Re
               retries++;
               continue;
             } else {
-              throw new Error(`GitHub API error: Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.`);
+              // For public repositories, 403 could mean the repo is private/inaccessible
+              throw new Error(`Repository inaccessible or API access forbidden (403). This may be due to repository permissions.`);
             }
           }
           
@@ -663,7 +664,7 @@ export async function makeGitHubRequest(url: string, maxRetries = 3): Promise<Re
             
             let message;
             if (isRateLimited) {
-              message = `Rate limit exceeded. GitHub limits API requests to ${currentRateLimit?.limit || 60} per hour for ${currentRateLimit?.limit === 60 ? 'unauthenticated users' : 'your access token'}. Limit resets at approximately ${resetTime}.`;
+              message = `Rate limit exceeded. GitHub limits API requests to ${currentRateLimit?.limit || 60} per hour. Limit resets at approximately ${resetTime}.`;
             } else if (isAbuseDetection) {
               message = `GitHub API abuse detection triggered. Please try again later.`;
             } else {
@@ -744,7 +745,7 @@ export async function makeGitHubRequest(url: string, maxRetries = 3): Promise<Re
   }
 }
 
-// Add auth headers for GitHub API requests
+// Add headers for GitHub API requests - No auth required for public repos
 export function addAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github.v3+json'
@@ -753,13 +754,14 @@ export function addAuthHeaders(): Record<string, string> {
   // Add a user-agent to help with rate limiting
   headers['User-Agent'] = 'GitHub-Open-Source-Checker';
   
-  // Add authentication token if available - improves rate limits and allows access to private repos
+  // For public repos, we don't need authentication
+  // But we'll still use the token if available to improve rate limits
   const token = localStorage.getItem("github_access_token");
   if (token) {
     headers['Authorization'] = `token ${token}`;
-    console.info('Using authenticated GitHub API request');
+    console.info('Using authenticated GitHub API request (higher rate limits)');
   } else {
-    console.info('Using unauthenticated GitHub API request');
+    console.info('Using unauthenticated GitHub API request (public repos only)');
   }
   
   return headers;

@@ -155,15 +155,19 @@ function AppContent() {
           if (response.status === 404) {
             throw new Error("Repository not found. The URL may be incorrect.");
           } else if (response.status === 403) {
-            // Check response body to determine if it's really a rate limit issue
+            // Show a more friendly error for public repos
             const responseText = await response.text();
             if (responseText.toLowerCase().includes("rate limit exceeded")) {
               throw new Error(`GitHub API rate limit exceeded. Please try again later.`);
+            } else if (response.status === 404) {
+              throw new Error(`Repository not found. The URL may be incorrect or the repository doesn't exist.`);
+            } else if (response.status === 401) {
+              throw new Error(`Repository not found or inaccessible. Please verify the URL is correct and the repository is public.`);
             } else {
-              throw new Error(`GitHub API error: Access forbidden (403). You may have exceeded rate limits or lack permission to access this repository.`);
+              throw new Error(`GitHub API error: ${response.status}`);
             }
           } else if (response.status === 401) {
-            throw new Error(`Authentication required. This is likely a private repository.`);
+            throw new Error(`Repository not found or inaccessible. Please verify the URL is correct and the repository is public.`);
           } else {
             throw new Error(`GitHub API error: ${response.status}`);
           }
@@ -624,7 +628,7 @@ function AppContent() {
         errorMessage = err.message;
         // Check for specific API error status codes
         if (errorMessage.includes("GitHub API error: 401")) {
-          errorMessage = "Authentication error (401). This repository may be private or doesn't exist.";
+          errorMessage = "Repository not found or inaccessible. Please verify the URL is correct and the repository is public.";
         } else if (errorMessage.includes("GitHub API error: 403")) {
           if (errorMessage.includes("rate limit exceeded")) {
             // Enhanced rate limit error message
@@ -742,21 +746,6 @@ function AppContent() {
       <header className="text-center mb-10">
         <div className="flex flex-col items-center justify-center mb-4">
           <div className="absolute right-4 top-4 flex items-center gap-2">
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8" aria-label="API Token">
-                  <Key className="h-4 w-4 mr-2" />
-                  API Token
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>GitHub Personal Access Token</DialogTitle>
-                </DialogHeader>
-                <PatInput />
-              </DialogContent>
-            </Dialog>
-            <TestApiButton />
             <ThemeToggle />
           </div>
           <GitHubLogo size={120} className="mb-4 animate-bounce-gentle" />
@@ -841,37 +830,9 @@ function AppContent() {
                   <div className="flex justify-between items-center">
                     <p className="flex items-center">
                       <Warning className="h-3 w-3 mr-1" />
-                      This tool works with both public repositories and private repositories with authentication.
+                      This tool works with public GitHub repositories
                     </p>
-                    {localStorage.getItem("github_access_token") && (
-                      <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30 h-5 ml-1 px-1">
-                        <Key className="h-3 w-3 mr-1" />
-                        <span className="text-xs">API Token Active</span>
-                      </Badge>
-                    )}
                   </div>
-                  
-                  {!localStorage.getItem("github_access_token") && (
-                    <div className="mt-1 pt-1 border-t border-border/30">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs">Private repository access:</span>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-6 text-xs py-0 px-2 text-primary"
-                          onClick={() => {
-                            const patDialog = document.querySelector('[aria-label="API Token"]');
-                            if (patDialog) {
-                              (patDialog as HTMLButtonElement).click();
-                            }
-                          }}
-                        >
-                          <Key className="h-3 w-3 mr-1" />
-                          Add API Token
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                   
                   {rateLimitInfo && rateLimitInfo.remaining !== undefined && (
                     <div className="mt-1 pt-1 border-t border-border/30 flex justify-between">
@@ -899,41 +860,16 @@ function AppContent() {
                             <p>GitHub API rate limiting impacts your ability to scan repositories:</p>
                             <ul className="list-disc pl-4 mt-1">
                               <li>Unauthenticated users are limited to 60 requests per hour</li>
-                              <li>Authenticated users get 5,000 requests per hour</li>
                               <li>Complex repositories with many files may require multiple API calls</li>
                               {rateLimitInfo && (
                                 <li>Your rate limit will reset at {rateLimitInfo.reset.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</li>
                               )}
-                              {!localStorage.getItem("github_access_token") && (
-                                <li className="mt-1 font-medium text-accent">
-                                  <span className="flex items-center">
-                                    <Key className="h-3 w-3 mr-1" />
-                                    Add a GitHub API token to increase your rate limit to 5,000 requests per hour
-                                  </span>
-                                </li>
-                              )}
                             </ul>
                             <div className="mt-2 p-2 bg-card rounded flex gap-2">
-                              {!localStorage.getItem("github_access_token") && (
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  className="flex-1"
-                                  onClick={() => {
-                                    const patDialog = document.querySelector('[aria-label="API Token"]');
-                                    if (patDialog) {
-                                      (patDialog as HTMLButtonElement).click();
-                                    }
-                                  }}
-                                >
-                                  <Key className="mr-2 h-4 w-4" />
-                                  Add GitHub Token
-                                </Button>
-                              )}
                               <Button 
                                 size="sm" 
-                                variant={localStorage.getItem("github_access_token") ? "outline" : "default"}
-                                className={localStorage.getItem("github_access_token") ? "flex-1" : ""}
+                                variant="outline"
+                                className="flex-1"
                                 onClick={() => {
                                   if (url) handleValidate();
                                 }}
@@ -946,11 +882,11 @@ function AppContent() {
                         )}
                         {error.includes("Authentication required") && (
                           <div className="mt-2 text-xs border-l-2 border-destructive-foreground/50 pl-2">
-                            <p>This repository appears to be private and requires authentication:</p>
+                            <p>This repository appears to be private or doesn't exist:</p>
                             <ul className="list-disc pl-4 mt-1">
-                              <li>Verify the repository URL is correct</li>
-                              <li>Click the "API Token" button at the top right to add a GitHub Personal Access Token</li>
-                              <li>Your token needs repo scope and SSO authorization if the repo is in an organization</li>
+                              <li>Verify the repository URL is correct and the repository exists</li>
+                              <li>Ensure the repository is public</li>
+                              <li>This tool works best with public repositories</li>
                             </ul>
                             <div className="mt-2 p-2 bg-card rounded">
                               <Button 
@@ -958,14 +894,11 @@ function AppContent() {
                                 variant="outline"
                                 className="w-full"
                                 onClick={() => {
-                                  const patDialog = document.querySelector('[aria-label="API Token"]');
-                                  if (patDialog) {
-                                    (patDialog as HTMLButtonElement).click();
-                                  }
+                                  setUrl("");
                                 }}
                               >
-                                <Key className="mr-2 h-4 w-4" />
-                                Add GitHub Token
+                                <MagnifyingGlass className="mr-2 h-4 w-4" />
+                                Try Another Repository
                               </Button>
                             </div>
                           </div>
@@ -991,7 +924,7 @@ function AppContent() {
                     <span>Repository Overview</span>
                     <Badge variant="outline" className="bg-secondary/50 flex items-center">
                       <FolderOpenIcon className="mr-1 h-3 w-3" />
-                      Public Repository Only
+                      Public Repository
                     </Badge>
                   </CardTitle>
                 </CardHeader>
