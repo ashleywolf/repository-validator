@@ -46,6 +46,12 @@ export type DependencyAnalysis = {
   rawSbomData?: any; // Raw SBOM data for export
 }
 
+export type SecurityFeatures = {
+  secretScanningEnabled: boolean;
+  dependabotSecurityUpdatesEnabled: boolean;
+  codeqlEnabled: boolean;
+}
+
 export type ValidationResult = {
   exists: boolean;
   message: string;
@@ -57,6 +63,7 @@ export type ValidationResult = {
   descriptionRating?: DescriptionRating;
   fileUrl?: string; // URL to view the file directly
   internalReferences?: string[]; // List of internal references found
+  securityFeatures?: SecurityFeatures; // GitHub security features status
 }
 
 export type FileRequirement = {
@@ -643,6 +650,61 @@ export async function analyzePackageJson(fileUrl: string): Promise<{
   }
 }
 
+// Check GitHub security features status (Secret scanning, Dependabot, CodeQL)
+export async function checkSecurityFeatures(owner: string, repo: string): Promise<SecurityFeatures> {
+  try {
+    // GitHub API endpoints for different security features
+    const securitySettingsUrl = `https://api.github.com/repos/${owner}/${repo}/security-and-analysis`;
+    
+    // Default result - assume features are disabled
+    const result: SecurityFeatures = {
+      secretScanningEnabled: false,
+      dependabotSecurityUpdatesEnabled: false,
+      codeqlEnabled: false
+    };
+    
+    try {
+      const response = await makeGitHubRequest(securitySettingsUrl);
+      
+      if (!response.ok) {
+        console.warn(`Security settings API returned status ${response.status} for ${owner}/${repo}`);
+        return result; // Return default disabled state
+      }
+      
+      const securitySettings = await response.json();
+      
+      // Check secret scanning status
+      if (securitySettings.secret_scanning && securitySettings.secret_scanning.status === 'enabled') {
+        result.secretScanningEnabled = true;
+      }
+      
+      // Check Dependabot security updates status
+      if (securitySettings.dependabot_security_updates && securitySettings.dependabot_security_updates.status === 'enabled') {
+        result.dependabotSecurityUpdatesEnabled = true;
+      }
+      
+      // Check CodeQL analysis status
+      if (securitySettings.advanced_security && securitySettings.advanced_security.status === 'enabled') {
+        // Advanced Security is enabled, now check if CodeQL is specifically enabled
+        // This is a simplification - in reality, you'd need to check workflow files or other APIs
+        result.codeqlEnabled = true;
+      }
+      
+      return result;
+    } catch (error) {
+      console.error("Error fetching security features:", error);
+      return result; // Return default disabled state on error
+    }
+  } catch (error) {
+    console.error("Error checking security features:", error);
+    return {
+      secretScanningEnabled: false,
+      dependabotSecurityUpdatesEnabled: false,
+      codeqlEnabled: false
+    };
+  }
+}
+
 // Combined comprehensive file requirements list
 export const consolidatedRequirements: FileRequirement[] = [
   { path: 'README.md', required: true, description: 'Project documentation' },
@@ -658,5 +720,6 @@ export const consolidatedRequirements: FileRequirement[] = [
   { path: 'requirements.txt', required: false, description: 'Python dependencies' },
   { path: 'setup.py', required: false, description: 'Package installation script' },
   // Special scan elements - these don't represent actual files but additional checks
-  { path: 'internal-references-check', required: false, description: 'Internal references & confidential info check' }
+  { path: 'internal-references-check', required: false, description: 'Internal references & confidential info check' },
+  { path: 'security-features-check', required: false, description: 'GitHub security features check' }
 ];

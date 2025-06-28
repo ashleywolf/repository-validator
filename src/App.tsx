@@ -15,7 +15,9 @@ import {
   DescriptionRating,
   makeGitHubRequest,
   exportSbomData,
-  scanForInternalReferences
+  scanForInternalReferences,
+  checkSecurityFeatures,
+  SecurityFeatures
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -40,7 +42,9 @@ import {
   Star,
   StarHalf,
   LinkSimple,
-  FolderOpen as FolderOpenIcon
+  FolderOpen as FolderOpenIcon,
+  ShieldCheck,
+  ShieldWarning
 } from "@phosphor-icons/react";
 
 function AppContent() {
@@ -311,6 +315,43 @@ function AppContent() {
         results['internal-references-check'] = {
           exists: false,
           message: 'Unable to scan for internal references',
+          status: 'warning',
+          location: 'none'
+        };
+      }
+      
+      // Check GitHub security features
+      try {
+        const securityFeaturesCheck = await checkSecurityFeatures(owner, repo);
+        
+        // Determine status based on enabled features
+        const allFeaturesEnabled = 
+          securityFeaturesCheck.secretScanningEnabled && 
+          securityFeaturesCheck.dependabotSecurityUpdatesEnabled && 
+          securityFeaturesCheck.codeqlEnabled;
+          
+        const someFeaturesEnabled = 
+          securityFeaturesCheck.secretScanningEnabled || 
+          securityFeaturesCheck.dependabotSecurityUpdatesEnabled || 
+          securityFeaturesCheck.codeqlEnabled;
+        
+        results['security-features-check'] = {
+          exists: true,
+          message: allFeaturesEnabled 
+            ? 'All security features are enabled' 
+            : someFeaturesEnabled 
+              ? 'Some security features are enabled, but not all'
+              : 'No security features are enabled',
+          status: allFeaturesEnabled ? 'success' : someFeaturesEnabled ? 'warning' : 'error',
+          location: 'repo',
+          securityFeatures: securityFeaturesCheck
+        };
+      } catch (error) {
+        console.error("Error checking security features:", error);
+        // Add a placeholder result
+        results['security-features-check'] = {
+          exists: false,
+          message: 'Unable to check security features',
           status: 'warning',
           location: 'none'
         };
@@ -814,6 +855,93 @@ function AppContent() {
                                         Internal references, trademarks, and confidential information should be removed prior to public release.
                                       </p>
                                     </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Security Features Check */}
+                          {result.securityFeatures && (
+                            <div className="mt-2">
+                              <div className="text-xs font-medium mb-1 flex items-center">
+                                {result.status === 'success' ? (
+                                  <ShieldCheck className="h-3 w-3 mr-1" />
+                                ) : (
+                                  <ShieldWarning className="h-3 w-3 mr-1" />
+                                )}
+                                GitHub Security Features:
+                              </div>
+                              <div className="bg-secondary/20 p-2 rounded text-xs">
+                                <div className="grid grid-cols-2 gap-1">
+                                  <div className="flex justify-between col-span-2">
+                                    <span>Secret Scanning:</span>
+                                    <span className={`font-medium ${result.securityFeatures.secretScanningEnabled ? 'text-accent' : 'text-destructive'}`}>
+                                      {result.securityFeatures.secretScanningEnabled ? (
+                                        <span className="flex items-center">
+                                          <Check className="inline h-3 w-3 mr-1" />
+                                          Enabled
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center">
+                                          <X className="inline h-3 w-3 mr-1" />
+                                          Disabled
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex justify-between col-span-2">
+                                    <span>Dependabot Security Updates:</span>
+                                    <span className={`font-medium ${result.securityFeatures.dependabotSecurityUpdatesEnabled ? 'text-accent' : 'text-destructive'}`}>
+                                      {result.securityFeatures.dependabotSecurityUpdatesEnabled ? (
+                                        <span className="flex items-center">
+                                          <Check className="inline h-3 w-3 mr-1" />
+                                          Enabled
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center">
+                                          <X className="inline h-3 w-3 mr-1" />
+                                          Disabled
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex justify-between col-span-2">
+                                    <span>CodeQL Analysis:</span>
+                                    <span className={`font-medium ${result.securityFeatures.codeqlEnabled ? 'text-accent' : 'text-destructive'}`}>
+                                      {result.securityFeatures.codeqlEnabled ? (
+                                        <span className="flex items-center">
+                                          <Check className="inline h-3 w-3 mr-1" />
+                                          Enabled
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center">
+                                          <X className="inline h-3 w-3 mr-1" />
+                                          Disabled
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                {!result.securityFeatures.secretScanningEnabled || 
+                                 !result.securityFeatures.dependabotSecurityUpdatesEnabled || 
+                                 !result.securityFeatures.codeqlEnabled ? (
+                                  <div className="mt-2 p-2 bg-amber-50 text-amber-800 rounded">
+                                    <p className="font-medium">⚠️ Security Recommendation</p>
+                                    <p className="text-xs mt-1">
+                                      Enable all security features to enhance your repository's security posture.
+                                      Visit repository settings → Security & analysis to enable these features.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 p-2 bg-green-50 text-green-800 rounded">
+                                    <p className="font-medium">✅ Good security posture</p>
+                                    <p className="text-xs mt-1">
+                                      All recommended security features are enabled for this repository.
+                                    </p>
                                   </div>
                                 )}
                               </div>

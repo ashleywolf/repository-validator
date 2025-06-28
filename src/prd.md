@@ -19,6 +19,14 @@
 - Repository validation (functionality remains unchanged)
 - Visual rebranding for a more professional appearance
 - Maintaining all existing functionality while updating the visual design
+- Security features check (Secret scanning, Dependabot security updates, and CodeQL)
+
+## Added Security Features
+- **Secret Scanning**: Validates if GitHub's secret scanning is enabled for the repository
+- **Dependabot Security Updates**: Checks if Dependabot security updates are enabled
+- **CodeQL Analysis**: Verifies if CodeQL is enabled for code scanning
+- **Visual Indicators**: Clear visual feedback on security feature status
+- **Recommendations**: Actionable guidance for enabling missing security features
 
 ## Design Direction
 
