@@ -22,8 +22,7 @@ import {
   TelemetryCheck,
   checkOwnershipProperty,
   OwnershipProperty,
-  clearGitHubRequestCache,
-  checkRateLimits
+  clearGitHubRequestCache
 } from "./lib/utils";
 import { FileTemplate, getAllTemplates } from "./lib/templates";
 import { TemplateViewer } from "./components/template-viewer";
@@ -108,13 +107,6 @@ function AppContent() {
       const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
       
       let repoContents;
-      
-      // First check rate limits proactively before making any requests
-      // to avoid hitting limits unexpectedly
-      const rateLimitCheck = await checkRateLimits();
-      if (!rateLimitCheck.ok) {
-        throw new Error(`Rate limit exceeded. GitHub limits API requests to 60 per hour for unauthenticated users. Limit resets at approximately ${rateLimitCheck.resetTime}.`);
-      }
       
       // Use the makeGitHubRequest helper with retries, auth handling and caching
       try {
@@ -367,7 +359,7 @@ function AppContent() {
           }
             
           // Perform these checks sequentially rather than in parallel to avoid rate limits
-          const results = { ...validationSummary.results };
+          let hasErrors = false;
           
           // Security features check - first priority
           try {
@@ -384,7 +376,7 @@ function AppContent() {
               securityFeaturesCheck.dependabotSecurityUpdatesEnabled || 
               securityFeaturesCheck.codeqlEnabled;
             
-            results['security-features-check'] = {
+            const securityResult = {
               exists: true,
               message: allFeaturesEnabled 
                 ? 'All security features are enabled' 
@@ -397,12 +389,13 @@ function AppContent() {
             };
             
             // Update UI with each successful check
-            setValidationSummary(prevState => ({
+            setValidationSummary(prevState => prevState ? ({
               ...prevState,
-              results: { ...prevState.results, ...results }
-            }));
+              results: { ...prevState.results, 'security-features-check': securityResult }
+            }) : null);
           } catch (error) {
             console.error("Error checking security features:", error);
+            hasErrors = true;
             // Continue with other checks
           }
           
@@ -413,7 +406,7 @@ function AppContent() {
           try {
             const ownershipProperty = await checkOwnershipProperty(owner, repo);
             
-            results['ownership-property-check'] = {
+            const ownershipResult = {
               exists: true,
               message: ownershipProperty.exists 
                 ? `Ownership property found: ${ownershipProperty.name}` 
@@ -424,12 +417,13 @@ function AppContent() {
             };
             
             // Update UI with this check's results
-            setValidationSummary({
-              ...validationSummary,
-              results
-            });
+            setValidationSummary(prevState => prevState ? ({
+              ...prevState,
+              results: { ...prevState.results, 'ownership-property-check': ownershipResult }
+            }) : null);
           } catch (error) {
             console.error("Error checking for ownership property:", error);
+            hasErrors = true;
             // Continue with other checks
           }
           
@@ -440,7 +434,7 @@ function AppContent() {
           try {
             const internalRefsCheck = await scanForInternalReferences(owner, repo);
             
-            results['internal-references-check'] = {
+            const internalRefsResult = {
               exists: true,
               message: internalRefsCheck.containsInternalRefs 
                 ? 'Found potential internal references or confidential information'
@@ -451,12 +445,13 @@ function AppContent() {
             };
             
             // Update UI with this check's results
-            setValidationSummary({
-              ...validationSummary,
-              results
-            });
+            setValidationSummary(prevState => prevState ? ({
+              ...prevState,
+              results: { ...prevState.results, 'internal-references-check': internalRefsResult }
+            }) : null);
           } catch (error) {
             console.error("Error scanning for internal references:", error);
+            hasErrors = true;
             // Continue with other checks
           }
           
@@ -467,7 +462,7 @@ function AppContent() {
           try {
             const telemetryCheck = await checkForTelemetryFiles(owner, repo);
             
-            results['telemetry-check'] = {
+            const telemetryResult = {
               exists: true,
               message: telemetryCheck.containsTelemetry 
                 ? 'Telemetry/analytics files found in repository' 
@@ -478,19 +473,26 @@ function AppContent() {
             };
             
             // Final update with all results
-            setValidationSummary(prevState => ({
+            setValidationSummary(prevState => prevState ? ({
               ...prevState,
-              results: { ...prevState.results, ...results }
-            }));
+              results: { ...prevState.results, 'telemetry-check': telemetryResult }
+            }) : null);
           } catch (error) {
             console.error("Error checking for telemetry files:", error);
+            hasErrors = true;
           }
           
           // Notify user that all checks are complete
           if (document.visibilityState === 'visible') {
-            toast.success("Repository scan complete!", {
-              description: "All checks have been completed. Review the results below."
-            });
+            if (hasErrors) {
+              toast.warning("Repository scan completed with some issues", {
+                description: "Basic validation is complete. Some advanced checks had issues but didn't prevent the scan."
+              });
+            } else {
+              toast.success("Repository scan complete!", {
+                description: "All checks have been completed. Review the results below."
+              });
+            }
           }
           
         } catch (err) {
